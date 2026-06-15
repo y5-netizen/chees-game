@@ -1,0 +1,102 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מנוע שחמט עצמאי</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <h2>לוח הבקרה</h2>
+            <div class="status-box" id="status">תור: <span id="turn-text">לבן</span></div>
+
+            <div class="captured">
+                <div id="captured-w"></div>
+                <div id="captured-b"></div>
+            </div>
+
+            <div class="controls">
+                <!-- clocks block -->
+                <div id="clocks-wrapper">
+                    <div id="clocks" class="no-clock"></div>
+
+                    <div id="clock-controls">
+                        <button id="toggleClockBtn">הוסף שעון</button>
+
+                        <div id="clock-form" style="display:none;">
+                            <div class="form-row">
+                                <label>לבן (דקות): <input id="whiteMinutesInput" type="number" min="0" value="5"></label>
+                            </div>
+                            <div class="form-row">
+                                <label>שחור (דקות): <input id="blackMinutesInput" type="number" min="0" value="5"></label>
+                            </div>
+                            <div class="form-row">
+                                <label>הוספה לכל מהלך (שניות): <input id="incrementInput" type="number" min="0" value="0"></label>
+                            </div>
+                            <div class="form-row">
+                                <button id="startClockBtn">הפעל שעון (תתחיל בעוד ~2s)</button>
+                                <button id="cancelClockBtn">בטל</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- game control buttons (moved inside .controls) -->
+                <div class="game-buttons">
+                    <button id="resetBtn">משחק חדש</button>
+                    <button id="flipBtn">הפוך לוח</button>
+
+
+                    <!-- undo/redo חדשים -->
+                    <button id="undoBtn" title="Undo (Ctrl+Z)">⟲ ביטול</button>
+                    <button id="redoBtn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">⟳ החזר</button>
+
+                    <button id="toggleAiBtn">מצב נגד מחשב: <span id="ai-status">כבוי</span></button>
+                    <!-- AI controls (hidden by default) -->
+                    <div id="ai-controls" class="ai-controls" style="display:none;">
+                        <label>
+                            עומק AI:
+                            <input id="aiDepthInput"
+                                   type="number"
+                                   min="1"
+                                   max="6"
+                                   value="3"
+                                   style="width:48px">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <p class="debug-info">הערכת מצב ללבן: <span id="eval-score">0</span></p>
+        </div>
+
+
+        <div class="board-wrapper">
+            <div id="board" class="board"></div>
+        </div>
+    </div>
+    <!-- Move panel on the left -->
+    <div id="moves-panel" class="moves-panel">
+        <div class="moves-panel-header">
+            <h3>מהלכים</h3>
+        </div>
+        <div id="move-list" class="move-list"></div>
+    </div>
+
+    <div id="game-over-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="winner-title">הלבן ניצח!</div>
+            <div class="modal-text" id="end-reason">על ידי מט</div>
+            <button onclick="game.reset()">משחק חדש</button>
+            <button class="close-btn" onclick="document.getElementById('game-over-modal').style.display='none'">סגור</button>
+        </div>
+    </div>
+    <script src="ai.js"></script>
+    <script src="script.js"></script>
+    <script src="multiplayer.js"></script>
+    <script src="server.py"></script>
+</body>
+</html>
