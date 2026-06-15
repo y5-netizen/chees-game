@@ -1,6 +1,6 @@
 ﻿const PIECE_IMAGES = {
-    'P': 'main/wp.png', 'R': 'wr.png', 'N': 'wn.png', 'B': 'wb.png', 'Q': 'wq.png', 'K': 'wk.png',
-    'p': 'bp.png', 'r': 'br.png', 'n': 'bn.png', 'b': 'bb.png', 'q': '/bq.png', 'k': 'bk.png'
+    'P': 'main/wp.png', 'R': 'main/wr.png', 'N': 'main/wn.png', 'B': 'main/wb.png', 'Q': 'main/wq.png', 'K': 'main/wk.png',
+    'p': 'main/bp.png', 'r': 'main/br.png', 'n': 'main/bn.png', 'b': 'main/bb.png', 'q': 'main/bq.png', 'k': 'main/bk.png'
 };
 
 const PIECE_VALUES = {
