@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מנוע שחמט עצמאי</title>
-    <link rel="stylesheet" href="style.css">
+    <title>&#x5DE;&#x5E0;&#x5D5;&#x5E2; &#x5E9;&#x5D7;&#x5DE;&#x5D8; &#x5E2;&#x5E6;&#x5DE;&#x5D0;&#x5D9;</title>
+    <link rel="stylesheet" href="style.css?v=20260624-final">
 </head>
 <body>
 
     <div class="main-container">
         <div class="sidebar">
-            <h2>לוח הבקרה</h2>
-            <div class="status-box" id="status">תור: <span id="turn-text">לבן</span></div>
+            <h2>&#x5DC;&#x5D5;&#x5D7; &#x5D4;&#x5D1;&#x5E7;&#x5E8;&#x5D4;</h2>
+            <div class="status-box" id="status">&#x5EA;&#x5D5;&#x5E8;: <span id="turn-text">&#x5DC;&#x5D1;&#x5DF;</span></div>
 
             <div class="captured">
                 <div id="captured-w"></div>
@@ -24,21 +25,21 @@
                     <div id="clocks" class="no-clock"></div>
 
                     <div id="clock-controls">
-                        <button id="toggleClockBtn">הוסף שעון</button>
+                        <button id="toggleClockBtn">&#x5D4;&#x5D5;&#x5E1;&#x5E3; &#x5E9;&#x5E2;&#x5D5;&#x5DF;</button>
 
                         <div id="clock-form" style="display:none;">
                             <div class="form-row">
-                                <label>לבן (דקות): <input id="whiteMinutesInput" type="number" min="0" value="5"></label>
+                                <label>&#x5DC;&#x5D1;&#x5DF; (&#x5D3;&#x5E7;&#x5D5;&#x5EA;): <input id="whiteMinutesInput" type="number" min="0" value="5"></label>
                             </div>
                             <div class="form-row">
-                                <label>שחור (דקות): <input id="blackMinutesInput" type="number" min="0" value="5"></label>
+                                <label>&#x5E9;&#x5D7;&#x5D5;&#x5E8; (&#x5D3;&#x5E7;&#x5D5;&#x5EA;): <input id="blackMinutesInput" type="number" min="0" value="5"></label>
                             </div>
                             <div class="form-row">
-                                <label>הוספה לכל מהלך (שניות): <input id="incrementInput" type="number" min="0" value="0"></label>
+                                <label>&#x5D4;&#x5D5;&#x5E1;&#x5E4;&#x5D4; &#x5DC;&#x5DB;&#x5DC; &#x5DE;&#x5D4;&#x5DC;&#x5DA; (&#x5E9;&#x5E0;&#x5D9;&#x5D5;&#x5EA;): <input id="incrementInput" type="number" min="0" value="0"></label>
                             </div>
                             <div class="form-row">
-                                <button id="startClockBtn">הפעל שעון (תתחיל בעוד ~2s)</button>
-                                <button id="cancelClockBtn">בטל</button>
+                                <button id="startClockBtn">&#x5D4;&#x5E4;&#x5E2;&#x5DC; &#x5E9;&#x5E2;&#x5D5;&#x5DF; (&#x5EA;&#x5EA;&#x5D7;&#x5D9;&#x5DC; &#x5D1;&#x5E2;&#x5D5;&#x5D3; ~2s)</button>
+                                <button id="cancelClockBtn">&#x5D1;&#x5D8;&#x5DC;</button>
                             </div>
                         </div>
                     </div>
@@ -46,19 +47,19 @@
 
                 <!-- game control buttons (moved inside .controls) -->
                 <div class="game-buttons">
-                    <button id="resetBtn">משחק חדש</button>
-                    <button id="flipBtn">הפוך לוח</button>
+                    <button id="resetBtn">&#x5DE;&#x5E9;&#x5D7;&#x5E7; &#x5D7;&#x5D3;&#x5E9;</button>
+                    <button id="flipBtn">&#x5D4;&#x5E4;&#x5D5;&#x5DA; &#x5DC;&#x5D5;&#x5D7;</button>
 
 
-                    <!-- undo/redo חדשים -->
-                    <button id="undoBtn" title="Undo (Ctrl+Z)">⟲ ביטול</button>
-                    <button id="redoBtn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">⟳ החזר</button>
+                    <!-- undo/redo &#x5D7;&#x5D3;&#x5E9;&#x5D9;&#x5DD; -->
+                    <button id="undoBtn" title="Undo (Ctrl+Z)">&#x27F2; &#x5D1;&#x5D9;&#x5D8;&#x5D5;&#x5DC;</button>
+                    <button id="redoBtn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">&#x27F3; &#x5D4;&#x5D7;&#x5D6;&#x5E8;</button>
 
-                    <button id="toggleAiBtn">מצב נגד מחשב: <span id="ai-status">כבוי</span></button>
+                    <button id="toggleAiBtn">&#x5DE;&#x5E6;&#x5D1; &#x5E0;&#x5D2;&#x5D3; &#x5DE;&#x5D7;&#x5E9;&#x5D1;: <span id="ai-status">&#x5DB;&#x5D1;&#x5D5;&#x5D9;</span></button>
                     <!-- AI controls (hidden by default) -->
                     <div id="ai-controls" class="ai-controls" style="display:none;">
                         <label>
-                            עומק AI:
+                            &#x5E2;&#x5D5;&#x5DE;&#x5E7; AI:
                             <input id="aiDepthInput"
                                    type="number"
                                    min="1"
@@ -70,7 +71,7 @@
                 </div>
             </div>
 
-            <p class="debug-info">הערכת מצב ללבן: <span id="eval-score">0</span></p>
+            <p class="debug-info">&#x5D4;&#x5E2;&#x5E8;&#x5DB;&#x5EA; &#x5DE;&#x5E6;&#x5D1; &#x5DC;&#x5DC;&#x5D1;&#x5DF;: <span id="eval-score">0</span></p>
         </div>
 
 
@@ -81,22 +82,21 @@
     <!-- Move panel on the left -->
     <div id="moves-panel" class="moves-panel">
         <div class="moves-panel-header">
-            <h3>מהלכים</h3>
+            <h3>&#x5DE;&#x5D4;&#x5DC;&#x5DB;&#x5D9;&#x5DD;</h3>
         </div>
         <div id="move-list" class="move-list"></div>
     </div>
 
     <div id="game-over-modal" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-title" id="winner-title">הלבן ניצח!</div>
-            <div class="modal-text" id="end-reason">על ידי מט</div>
-            <button onclick="game.reset()">משחק חדש</button>
-            <button class="close-btn" onclick="document.getElementById('game-over-modal').style.display='none'">סגור</button>
+            <div class="modal-title" id="winner-title">&#x5D4;&#x5DC;&#x5D1;&#x5DF; &#x5E0;&#x5D9;&#x5E6;&#x5D7;!</div>
+            <div class="modal-text" id="end-reason">&#x5E2;&#x5DC; &#x5D9;&#x5D3;&#x5D9; &#x5DE;&#x5D8;</div>
+            <button onclick="game.reset()">&#x5DE;&#x5E9;&#x5D7;&#x5E7; &#x5D7;&#x5D3;&#x5E9;</button>
+            <button class="close-btn" onclick="document.getElementById('game-over-modal').style.display='none'">&#x5E1;&#x5D2;&#x5D5;&#x5E8;</button>
         </div>
     </div>
-    <script src="ai.js"></script>
-    <script src="script.js"></script>
-    <script src="multiplayer.js"></script>
-    <script src="server.py"></script>
+    <script src="ai.js?v=20260624-final"></script>
+    <script src="script.js?v=20260624-final"></script>
+    <script src="multiplayer.js?v=20260624-final"></script>
 </body>
 </html>
