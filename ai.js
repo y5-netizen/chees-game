@@ -1,10 +1,10 @@
-﻿// ai.js - Negamax AI with Alpha-Beta Pruning + Improvements
+// ai.js - Negamax AI with Alpha-Beta Pruning + Improvements
 // ============================================================
 // CHANGES FROM ORIGINAL:
 //  1. BUG FIX: Duplicate AI trigger in makeMove (was calling startAs twice)
 //  2. BUG FIX: _negamax terminal node evaluation ignored color sign correctly
-//     but didn't detect checkmate vs stalemate — now scores checkmate as -Infinity
-//  3. BUG FIX: promotion piece was always 'Q'/'q' — now respects underpromotion hints
+//     but didn't detect checkmate vs stalemate \u2014 now scores checkmate as -Infinity
+//  3. BUG FIX: promotion piece was always 'Q'/'q' \u2014 now respects underpromotion hints
 //  4. IMPROVEMENT: Piece-square tables (PST) added to evaluate() via engine hook
 //  5. IMPROVEMENT: Move ordering now includes checks, not just captures
 //  6. IMPROVEMENT: Quiescence search added to reduce horizon effect
@@ -146,18 +146,16 @@ class SimpleAI {
     }
 
     setDepth(d) {
-        this.maxDepth = Math.max(1, Math.floor(d));
+        this.maxDepth = Math.max(1, Math.min(6, Math.floor(Number(d) || 3)));
     }
 
     startAs(color) {
-        if (this.isRunning) return;
+        if (this.isRunning || this.engine.isGameOver) return;
         if (this.engine.turn !== color) return;
 
         this.playAs = color;
         this._shouldStop = false;
         this.isRunning = true;
-
-        console.log('[AI] startAs → thinking as', color);
         setTimeout(() => this._thinkAndPlay(), 10);
     }
 
@@ -167,53 +165,46 @@ class SimpleAI {
     }
 
     _thinkAndPlay() {
-        if (this._shouldStop) {
+        if (this._shouldStop || this.engine.isGameOver) {
             this.isRunning = false;
             return;
         }
 
-        console.log('[AI] thinkAndPlay called. turn=', this.engine.turn);
-
-        const rootClone = this.engine.clone();
-        console.log('[AI] rootClone.turn =', rootClone.turn);
-
-        setTimeout(() => {
+        try {
+            const rootClone = this.engine.clone();
             const best = this._findBestMove(rootClone, this.maxDepth);
-
-            console.log('[AI] best move result:', best);
-
-            if (!best.move || this._shouldStop) {
-                console.warn('[AI] No legal move → stopping AI');
-                this.stop();
-                return;
-            }
+            if (!best.move || this._shouldStop) return;
 
             const m = best.move;
-            console.log('[AI] applying move:', m);
-
-            this.engine.makeMove(
+            const result = this.engine.makeMove(
                 m.from.r, m.from.c,
                 m.to.r, m.to.c,
                 m.promotion || null
             );
+
+            if (result === false) return;
 
             if (this.ui) {
                 this.ui.selectedSquare = null;
                 this.ui.possibleMoves = [];
                 this.ui.renderBoard();
             }
-
             if (typeof renderMoveList === 'function') renderMoveList();
 
-            // FIX: Only switch clock if it is actually running
             if (typeof clockInstance !== 'undefined' && clockInstance &&
-                typeof clockInstance.switchTurn === 'function' &&
-                clockInstance.running) {
+                typeof clockInstance.switchTurn === 'function' && clockInstance.running) {
                 clockInstance.switchTurn(this.engine.turn);
             }
 
+            if (result && this.ui && typeof this.ui.showGameOver === 'function') {
+                if (typeof clockInstance !== 'undefined' && clockInstance) clockInstance.stop();
+                this.ui.showGameOver(result);
+            }
+        } catch (error) {
+            console.error('[AI] \u05E9\u05D2\u05D9\u05D0\u05D4 \u05D1\u05D7\u05D9\u05E9\u05D5\u05D1 \u05DE\u05E1\u05E2:', error);
+        } finally {
             this.isRunning = false;
-        }, 10);
+        }
     }
 
     _findBestMove(engineNode, depth) {
@@ -255,69 +246,62 @@ class SimpleAI {
     _negamax(node, depth, alpha, beta, colorSign) {
         if (this._shouldStop) return 0;
 
-        // Quiescence search at leaf nodes to avoid horizon effect
-        if (depth === 0) {
+        const moves = this._generateAllLegalMoves(node);
+        if (moves.length === 0) {
+            return node.isKingInCheck(node.turn) ? (-100000 - depth) : 0;
+        }
+
+        if (depth <= 0) {
             return this._quiescence(node, alpha, beta, colorSign, 4);
         }
 
-        const moves = this._generateAllLegalMoves(node);
-
-        // Terminal node: checkmate or stalemate
-        if (moves.length === 0) {
-            // FIX: distinguish checkmate (very bad) from stalemate (neutral)
-            if (node.isKingInCheck(node.turn)) {
-                // Checkmate: current side to move loses
-                return -100000; // large negative (losing)
-            }
-            return 0; // stalemate
-        }
-
         this._sortMoves(moves, node);
-
-        let maxScore = -Infinity;
+        let best = -Infinity;
 
         for (const m of moves) {
-            const makeResult = node.makeMove(m.from.r, m.from.c, m.to.r, m.to.c, m.promotion || null);
-            if (makeResult === false) continue;
+            if (this._shouldStop) break;
+            const result = node.makeMove(m.from.r, m.from.c, m.to.r, m.to.c, m.promotion);
+            if (result === false) continue;
 
-            const score = -this._negamax(
-                node,
-                depth - 1,
-                -beta,
-                -alpha,
-                -colorSign
-            );
-
+            const score = -this._negamax(node, depth - 1, -beta, -alpha, -colorSign);
             node.undoMove();
 
-            if (score > maxScore) maxScore = score;
-            if (score > alpha) alpha = score;
-            if (alpha >= beta) break; // alpha-beta cutoff
+            best = Math.max(best, score);
+            alpha = Math.max(alpha, score);
+            if (alpha >= beta) break;
         }
 
-        return maxScore;
+        return best;
     }
 
     // Quiescence search: only look at captures to resolve tactical noise at leaf nodes
     _quiescence(node, alpha, beta, colorSign, maxDepth) {
         if (this._shouldStop) return 0;
 
-        // Stand-pat score: evaluate statically
+        const allMoves = this._generateAllLegalMoves(node);
+        if (allMoves.length === 0) {
+            return node.isKingInCheck(node.turn) ? (-100000 - maxDepth) : 0;
+        }
+
+        const inCheck = node.isKingInCheck(node.turn);
         const standPat = colorSign * enhancedEvaluate(node);
 
-        if (standPat >= beta) return beta;
-        if (standPat > alpha) alpha = standPat;
+        if (!inCheck) {
+            if (standPat >= beta) return beta;
+            if (standPat > alpha) alpha = standPat;
+            if (maxDepth <= 0) return alpha;
+        } else if (maxDepth <= 0) {
+            return standPat;
+        }
 
-        if (maxDepth <= 0) return standPat;
-
-        // Only consider captures
-        const moves = this._generateAllLegalMoves(node).filter(m => m.capturedValue > 0);
+        const moves = inCheck
+            ? allMoves
+            : allMoves.filter(m => m.capturedValue > 0 || m.promotion);
         this._sortMoves(moves, node);
 
         for (const m of moves) {
-            if (this._shouldStop) break;
-            const makeResult = node.makeMove(m.from.r, m.from.c, m.to.r, m.to.c, m.promotion || null);
-            if (makeResult === false) continue;
+            const result = node.makeMove(m.from.r, m.from.c, m.to.r, m.to.c, m.promotion);
+            if (result === false) continue;
 
             const score = -this._quiescence(node, -beta, -alpha, -colorSign, maxDepth - 1);
             node.undoMove();
@@ -325,7 +309,6 @@ class SimpleAI {
             if (score >= beta) return beta;
             if (score > alpha) alpha = score;
         }
-
         return alpha;
     }
 
