@@ -1,7 +1,7 @@
 console.log('Chess build: 2026-06-24 rebuilt-final');
 const PIECE_IMAGES = {
     'P': /wp.png', 'R': '/wr.png', 'N': '/wn.png', 'B': '/wb.png', 'Q': '/wq.png', 'K': '/wk.png',
-    'p': 'images/bp.png', 'r': 'images/br.png', 'n': 'images/bn.png', 'b': 'images/bb.png', 'q': 'images/bq.png', 'k': 'images/bk.png'
+    'p': '/bp.png', 'r': '/br.png', 'n': '/bn.png', 'b': '/bb.png', 'q': '/bq.png', 'k': '/bk.png'
 };
 
 const PIECE_VALUES = {
