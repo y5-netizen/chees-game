@@ -1,5 +1,6 @@
+console.log('Chess build: 2026-06-24 rebuilt-final');
 const PIECE_IMAGES = {
-    'P': 'wp.png', 'R': 'images/wr.png', 'N': 'images/wn.png', 'B': 'images/wb.png', 'Q': 'images/wq.png', 'K': 'images/wk.png',
+    'P': 'images/wp.png', 'R': 'images/wr.png', 'N': 'images/wn.png', 'B': 'images/wb.png', 'Q': 'images/wq.png', 'K': 'images/wk.png',
     'p': 'images/bp.png', 'r': 'images/br.png', 'n': 'images/bn.png', 'b': 'images/bb.png', 'q': 'images/bq.png', 'k': 'images/bk.png'
 };
 
@@ -28,20 +29,18 @@ class ChessEngine {
         ];
         this.turn = 'white';
         this.isGameOver = false;
-        this.enPassantTarget = null; // {r, c} if exists
+        this.gameResult = null; // 'white' | 'black' | 'draw' | null
+        this.enPassantTarget = null;
         this.castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
         this.lastMove = null;
         this.moveHistory = [];
         this.redoStack = [];
-        // inside reset(), near this.moveHistory = []; this.redoStack = [];
-        this.masterHistory = []; // canonical list of applied moves (keeps in-sync with moveHistory)
-        // --- בדיקות תקנים וקיום חוקים נוספים ---
-        this.halfmoveClock = 0;              // מונה חצאי-מהלכים לחוק 50 מהלכים
-        this.positionCount = new Map();     // מיפוי FEN חלקי -> ספירה, ל-threefold
-        const startKey = this.getPositionKey ? this.getPositionKey() : null;
-        if (startKey) this.positionCount.set(startKey, 1);
+        this.masterHistory = [];
+        this.halfmoveClock = 0;
+        this.positionCount = new Map();
+        this.positionCount.set(this.getPositionKey(), 1);
     }
-    // מחזיר מחרוזת מייצגת מצב (FEN חלקי): board turn castling enPassant
+    // \u05DE\u05D7\u05D6\u05D9\u05E8 \u05DE\u05D7\u05E8\u05D5\u05D6\u05EA \u05DE\u05D9\u05D9\u05E6\u05D2\u05EA \u05DE\u05E6\u05D1 (FEN \u05D7\u05DC\u05E7\u05D9): board turn castling enPassant
     getPositionKey() {
         let board = '';
 
@@ -78,7 +77,7 @@ class ChessEngine {
 
         return `${board} ${turn} ${castling} ${ep}`;
     }
-    // האם יש חומר לא מספיק לשחק (תיקו)
+    // \u05D4\u05D0\u05DD \u05D9\u05E9 \u05D7\u05D5\u05DE\u05E8 \u05DC\u05D0 \u05DE\u05E1\u05E4\u05D9\u05E7 \u05DC\u05E9\u05D7\u05E7 (\u05EA\u05D9\u05E7\u05D5)
     hasInsufficientMaterial() {
         const pieces = [];
         for (let r = 0; r < 8; r++) {
@@ -88,16 +87,16 @@ class ChessEngine {
             }
         }
 
-        // רק מלכים
+        // \u05E8\u05E7 \u05DE\u05DC\u05DB\u05D9\u05DD
         if (pieces.length === 2) return true;
 
         // K + (B|N) vs K
         if (pieces.length === 3) {
-            // אם אחד הכלים הוא בישוף או פרש -> insufficient
+            // \u05D0\u05DD \u05D0\u05D7\u05D3 \u05D4\u05DB\u05DC\u05D9\u05DD \u05D4\u05D5\u05D0 \u05D1\u05D9\u05E9\u05D5\u05E3 \u05D0\u05D5 \u05E4\u05E8\u05E9 -> insufficient
             return pieces.includes('b') || pieces.includes('n');
         }
 
-        // K+B vs K+B ויש לשני הבישופים אותו צבע משבצת
+        // K+B vs K+B \u05D5\u05D9\u05E9 \u05DC\u05E9\u05E0\u05D9 \u05D4\u05D1\u05D9\u05E9\u05D5\u05E4\u05D9\u05DD \u05D0\u05D5\u05EA\u05D5 \u05E6\u05D1\u05E2 \u05DE\u05E9\u05D1\u05E6\u05EA
         if (pieces.length === 4 && pieces.filter(p => p === 'b').length === 2) {
             const bishopColors = [];
             for (let r = 0; r < 8; r++) {
@@ -121,11 +120,17 @@ class ChessEngine {
     }
 
     getLegalMoves(r, c) {
-        const piece = this.board[r][c];
-        if (!piece) return [];
+        const piece = this.getPiece(r, c);
+        if (!piece || colorOf(piece) !== this.turn) return [];
+
         let moves = this.getPseudoMoves(r, c);
-        if (piece.toLowerCase() === 'k') moves = moves.concat(this.getCastleMoves(r, c, piece));
-        return moves.filter(move => !this.testMoveLeavesKingInCheck(r, c, move.r, move.c, move));
+        if (piece.toLowerCase() === 'k') {
+            moves = moves.concat(this.getCastleMoves(r, c, piece));
+        }
+
+        return moves.filter(move =>
+            !this.testMoveLeavesKingInCheck(r, c, move.r, move.c, move)
+        );
     }
 
     getPseudoMoves(r, c) {
@@ -164,9 +169,11 @@ class ChessEngine {
                 moves.push({ r: nr, c: nc, promotion: isProm });
             }
             if (this.enPassantTarget && this.enPassantTarget.r === nr && this.enPassantTarget.c === nc) {
-                // en-passant can never be a promotion (since captured pawn is not on last rank),
-                // but keep flag explicit false
-                moves.push({ r: nr, c: nc, isEnPassant: true, promotion: false });
+                const adjacent = this.getPiece(r, nc);
+                const expectedPawn = p === 'P' ? 'p' : 'P';
+                if (adjacent === expectedPawn) {
+                    moves.push({ r: nr, c: nc, isEnPassant: true, promotion: false });
+                }
             }
         });
 
@@ -198,66 +205,91 @@ class ChessEngine {
     }
 
     getCastleMoves(r, c, p) {
-        let moves = [];
+        const moves = [];
         const color = isUpper(p) ? 'white' : 'black';
-        if (this.isKingInCheck(color)) return moves;
-        const row = r;
-        const rights = color === 'white' ? { k: 'wK', q: 'wQ' } : { k: 'bK', q: 'bQ' };
-        const kingCol = c;
+        const homeRow = color === 'white' ? 7 : 0;
+        const kingPiece = color === 'white' ? 'K' : 'k';
+        const rookPiece = color === 'white' ? 'R' : 'r';
+        const enemyColor = color === 'white' ? 'black' : 'white';
 
-        if (this.castlingRights[rights.k]) {
-            const rook = this.getPiece(row, 7);
-            if (rook && (color === 'white' ? rook === 'R' : rook === 'r')) {
-                let clear = true;
-                for (let cc = kingCol + 1; cc <= 6; cc++) if (this.getPiece(row, cc)) { clear = false; break; }
-                if (clear) {
-                    if (!this.testMoveLeavesKingInCheck(row, kingCol, row, kingCol + 1) &&
-                        !this.testMoveLeavesKingInCheck(row, kingCol, row, kingCol + 2)) {
-                        moves.push({ r: row, c: kingCol + 2, isCastle: 'k' });
-                    }
-                }
-            }
+        // Castling is legal only from the original king square.
+        if (r !== homeRow || c !== 4 || p !== kingPiece || this.isKingInCheck(color)) return moves;
+
+        const kingRight = color === 'white' ? 'wK' : 'bK';
+        if (this.castlingRights[kingRight] && this.getPiece(homeRow, 7) === rookPiece &&
+            !this.getPiece(homeRow, 5) && !this.getPiece(homeRow, 6) &&
+            !this.isSquareAttacked(homeRow, 5, enemyColor) &&
+            !this.isSquareAttacked(homeRow, 6, enemyColor)) {
+            moves.push({ r: homeRow, c: 6, isCastle: 'k' });
         }
 
-        if (this.castlingRights[rights.q]) {
-            const rook = this.getPiece(row, 0);
-            if (rook && (color === 'white' ? rook === 'R' : rook === 'r')) {
-                let clear = true;
-                for (let cc = kingCol - 1; cc >= 1; cc--) if (this.getPiece(row, cc)) { clear = false; break; }
-                if (clear) {
-                    if (!this.testMoveLeavesKingInCheck(row, kingCol, row, kingCol - 1) &&
-                        !this.testMoveLeavesKingInCheck(row, kingCol, row, kingCol - 2)) {
-                        moves.push({ r: row, c: kingCol - 2, isCastle: 'q' });
-                    }
-                }
-            }
+        const queenRight = color === 'white' ? 'wQ' : 'bQ';
+        if (this.castlingRights[queenRight] && this.getPiece(homeRow, 0) === rookPiece &&
+            !this.getPiece(homeRow, 1) && !this.getPiece(homeRow, 2) && !this.getPiece(homeRow, 3) &&
+            !this.isSquareAttacked(homeRow, 3, enemyColor) &&
+            !this.isSquareAttacked(homeRow, 2, enemyColor)) {
+            moves.push({ r: homeRow, c: 2, isCastle: 'q' });
         }
 
         return moves;
     }
 
-    isKingInCheck(color) {
-        let kingPos = null;
-        const kingChar = color === 'white' ? 'K' : 'k';
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                if (this.board[r][c] === kingChar) { kingPos = { r, c }; break; }
-            }
-            if (kingPos) break;
+    isSquareAttacked(targetR, targetC, byColor) {
+        // Pawns attack diagonally only; their forward moves are not attacks.
+        const pawn = byColor === 'white' ? 'P' : 'p';
+        const pawnRow = targetR + (byColor === 'white' ? 1 : -1);
+        for (const dc of [-1, 1]) {
+            const c = targetC + dc;
+            if (inBounds(pawnRow, c) && this.board[pawnRow][c] === pawn) return true;
         }
-        if (!kingPos) return true;
-        const enemyColor = color === 'white' ? 'black' : 'white';
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const p = this.board[r][c];
-                if (!p) continue;
-                if ((enemyColor === 'white' && isUpper(p)) || (enemyColor === 'black' && !isUpper(p))) {
-                    const moves = this.getPseudoMoves(r, c);
-                    if (moves.some(m => m.r === kingPos.r && m.c === kingPos.c)) return true;
+
+        const knight = byColor === 'white' ? 'N' : 'n';
+        const knightOffsets = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+        for (const [dr, dc] of knightOffsets) {
+            const r = targetR + dr, c = targetC + dc;
+            if (inBounds(r, c) && this.board[r][c] === knight) return true;
+        }
+
+        const king = byColor === 'white' ? 'K' : 'k';
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (!dr && !dc) continue;
+                const r = targetR + dr, c = targetC + dc;
+                if (inBounds(r, c) && this.board[r][c] === king) return true;
+            }
+        }
+
+        const rook = byColor === 'white' ? 'R' : 'r';
+        const bishop = byColor === 'white' ? 'B' : 'b';
+        const queen = byColor === 'white' ? 'Q' : 'q';
+        const lines = [
+            [1,0,rook],[-1,0,rook],[0,1,rook],[0,-1,rook],
+            [1,1,bishop],[1,-1,bishop],[-1,1,bishop],[-1,-1,bishop]
+        ];
+        for (const [dr, dc, piece] of lines) {
+            let r = targetR + dr, c = targetC + dc;
+            while (inBounds(r, c)) {
+                const found = this.board[r][c];
+                if (found) {
+                    if (found === piece || found === queen) return true;
+                    break;
                 }
+                r += dr; c += dc;
             }
         }
         return false;
+    }
+
+    isKingInCheck(color) {
+        const kingChar = color === 'white' ? 'K' : 'k';
+        let kingR = -1, kingC = -1;
+        for (let r = 0; r < 8 && kingR < 0; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (this.board[r][c] === kingChar) { kingR = r; kingC = c; break; }
+            }
+        }
+        if (kingR < 0) return true;
+        return this.isSquareAttacked(kingR, kingC, color === 'white' ? 'black' : 'white');
     }
 
     testMoveLeavesKingInCheck(fromR, fromC, toR, toC, moveObject = null) {
@@ -266,7 +298,7 @@ class ChessEngine {
 
         const captured = this.board[toR][toC];
         let capturedEnPassant = null;
-        if (!captured && piece.toLowerCase() === 'p' && fromC !== toC) {
+        if (moveObject && moveObject.isEnPassant) {
             capturedEnPassant = this.board[fromR][toC];
             this.board[fromR][toC] = null;
         }
@@ -286,51 +318,49 @@ class ChessEngine {
 
     /* REPLACE makeMove */
     makeMove(fromR, fromC, toR, toC, promotionPiece = null) {
-        const piece = this.board[fromR][fromC];
-        if (!piece) return false;
+        if (this.isGameOver) return false;
 
-        const moves = this.getLegalMoves(fromR, fromC);
-        const moveData = moves.find(m => m.r === toR && m.c === toC);
+        const piece = this.getPiece(fromR, fromC);
+        if (!piece || colorOf(piece) !== this.turn) return false;
+
+        const moveData = this.getLegalMoves(fromR, fromC)
+            .find(m => m.r === toR && m.c === toC);
         if (!moveData) return false;
 
-        if (moveData.promotion && !promotionPiece) return false;
-
-        // ========== PREPARE SNAPSHOT ==========
-        const prevTurn = this.turn;
-        const prevEnPassant = this.enPassantTarget ? { r: this.enPassantTarget.r, c: this.enPassantTarget.c } : null;
-        const prevCastling = { ...this.castlingRights };
-        const prevHalf = this.halfmoveClock;
-        const prevPosCount = new Map(this.positionCount);
-        const prevIsGameOver = this.isGameOver;
-        const prevLastMove = this.lastMove ? { ...this.lastMove } : null;
-
-        // captured piece
-        let capturedPiece = null;
-        let capturedPos = null;
-        if (moveData.isEnPassant) {
-            capturedPiece = this.board[fromR][toC];
-            capturedPos = { r: fromR, c: toC };
+        if (moveData.promotion) {
+            const allowed = isUpper(piece) ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
+            if (!allowed.includes(promotionPiece)) return false;
         } else {
-            capturedPiece = this.board[toR][toC];
-            capturedPos = { r: toR, c: toC };
+            promotionPiece = null;
         }
 
+        const prevEnPassant = this.enPassantTarget ? { ...this.enPassantTarget } : null;
+        const prevLastMove = this.lastMove ? JSON.parse(JSON.stringify(this.lastMove)) : null;
         const historyEntry = {
             from: { r: fromR, c: fromC, piece },
-            to: { r: toR, c: toC, captured: capturedPiece, capturedPos },
+            to: { r: toR, c: toC, captured: null, capturedPos: null },
             special: { ...moveData },
-            prevTurn,
-            postTurn: null,
+            prevTurn: this.turn,
             prevEnPassant,
-            prevCastling,
-            prevHalfmoveClock: prevHalf,
-            prevPositionCount: prevPosCount,
-            prevIsGameOver,
+            prevCastling: { ...this.castlingRights },
+            prevHalfmoveClock: this.halfmoveClock,
+            prevPositionCount: new Map(this.positionCount),
+            prevIsGameOver: this.isGameOver,
+            prevGameResult: this.gameResult,
             prevLastMove
         };
 
-        // ========== PERFORM MOVE ==========
-        if (moveData.isEnPassant) this.board[fromR][toC] = null;
+        if (moveData.isEnPassant) {
+            historyEntry.to.captured = this.board[fromR][toC];
+            historyEntry.to.capturedPos = { r: fromR, c: toC };
+            this.board[fromR][toC] = null;
+        } else {
+            historyEntry.to.captured = this.board[toR][toC];
+            historyEntry.to.capturedPos = { r: toR, c: toC };
+        }
+
+        const capturedPiece = historyEntry.to.captured;
+        const capturedPos = historyEntry.to.capturedPos;
 
         this.board[toR][toC] = piece;
         this.board[fromR][fromC] = null;
@@ -338,192 +368,157 @@ class ChessEngine {
         if (moveData.isCastle === 'k') {
             this.board[toR][toC - 1] = this.board[toR][7];
             this.board[toR][7] = null;
-        }
-        if (moveData.isCastle === 'q') {
+        } else if (moveData.isCastle === 'q') {
             this.board[toR][toC + 1] = this.board[toR][0];
             this.board[toR][0] = null;
         }
 
-        if (piece.toLowerCase() === 'p' && (toR === 0 || toR === 7)) {
-            this.board[toR][toC] = promotionPiece || (isUpper(piece) ? 'Q' : 'q');
-            historyEntry.promotionPiece = this.board[toR][toC];
+        if (moveData.promotion) {
+            this.board[toR][toC] = promotionPiece;
+            historyEntry.promotionPiece = promotionPiece;
         }
 
-        // castling rights
         if (piece === 'K') { this.castlingRights.wK = false; this.castlingRights.wQ = false; }
         if (piece === 'k') { this.castlingRights.bK = false; this.castlingRights.bQ = false; }
+        if (piece === 'R' && fromR === 7 && fromC === 7) this.castlingRights.wK = false;
+        if (piece === 'R' && fromR === 7 && fromC === 0) this.castlingRights.wQ = false;
+        if (piece === 'r' && fromR === 0 && fromC === 7) this.castlingRights.bK = false;
+        if (piece === 'r' && fromR === 0 && fromC === 0) this.castlingRights.bQ = false;
 
-        if (piece === 'R') {
-            if (fromR === 7 && fromC === 7) this.castlingRights.wK = false;
-            if (fromR === 7 && fromC === 0) this.castlingRights.wQ = false;
-        }
-        if (piece === 'r') {
-            if (fromR === 0 && fromC === 7) this.castlingRights.bK = false;
-            if (fromR === 0 && fromC === 0) this.castlingRights.bQ = false;
-        }
+        if (capturedPiece === 'R' && capturedPos.r === 7 && capturedPos.c === 7) this.castlingRights.wK = false;
+        if (capturedPiece === 'R' && capturedPos.r === 7 && capturedPos.c === 0) this.castlingRights.wQ = false;
+        if (capturedPiece === 'r' && capturedPos.r === 0 && capturedPos.c === 7) this.castlingRights.bK = false;
+        if (capturedPiece === 'r' && capturedPos.r === 0 && capturedPos.c === 0) this.castlingRights.bQ = false;
 
-        if (capturedPiece === 'R') {
-            if (capturedPos.r === 7 && capturedPos.c === 7) this.castlingRights.wK = false;
-            if (capturedPos.r === 7 && capturedPos.c === 0) this.castlingRights.wQ = false;
-        }
-        if (capturedPiece === 'r') {
-            if (capturedPos.r === 0 && capturedPos.c === 7) this.castlingRights.bK = false;
-            if (capturedPos.r === 0 && capturedPos.c === 0) this.castlingRights.bQ = false;
-        }
+        this.enPassantTarget = moveData.isDouble
+            ? { r: Math.floor((fromR + toR) / 2), c: toC }
+            : null;
 
-        const isPawnMove = piece && piece.toLowerCase() === 'p';
-        const isCapture = !!capturedPiece;
+        this.lastMove = {
+            from: { r: fromR, c: fromC },
+            to: { r: toR, c: toC },
+            special: { ...moveData }
+        };
 
-        this.enPassantTarget = moveData.isDouble ? { r: Math.floor((fromR + toR) / 2), c: toC } : null;
-        this.lastMove = { from: { r: fromR, c: fromC }, to: { r: toR, c: toC }, special: moveData };
+        const isPawnMove = piece.toLowerCase() === 'p';
+        this.halfmoveClock = (isPawnMove || capturedPiece)
+            ? 0
+            : this.halfmoveClock + 1;
 
-        this.halfmoveClock = (isPawnMove || isCapture) ? 0 : (this.halfmoveClock || 0) + 1;
-
-        // flip turn
         this.turn = this.turn === 'white' ? 'black' : 'white';
-        // === הפעלת AI אחרי מעבר תור ===
-        if (
-            aiEnabled &&
-            window.aiPlayer &&
-            engine.turn === aiColor &&
-            !window.aiPlayer.isRunning
-        ) {
-            console.log('AI turn detected → starting AI');
-            window.aiPlayer.startAs(aiColor);
+
+        const positionKey = this.getPositionKey();
+        this.positionCount.set(positionKey, (this.positionCount.get(positionKey) || 0) + 1);
+
+        const endResult = this.checkGameOver();
+        if (endResult) {
+            this.isGameOver = true;
+            this.gameResult = (endResult === 'checkmate')
+                ? (this.turn === 'white' ? 'black' : 'white')
+                : 'draw';
+        } else {
+            this.isGameOver = false;
+            this.gameResult = null;
         }
+
         historyEntry.postTurn = this.turn;
-
-        // ======= הפעלת AI אם מצב נגד מחשב פעיל =======
-
-        // update position count
-        if (this.getPositionKey) {
-            const key = this.getPositionKey();
-            const prev = this.positionCount.get(key) || 0;
-            this.positionCount.set(key, prev + 1);
-        }
+        historyEntry.postEnPassant = this.enPassantTarget ? { ...this.enPassantTarget } : null;
+        historyEntry.postCastling = { ...this.castlingRights };
+        historyEntry.postHalfmoveClock = this.halfmoveClock;
         historyEntry.postPositionCount = new Map(this.positionCount);
+        historyEntry.postIsGameOver = this.isGameOver;
+        historyEntry.postGameResult = this.gameResult;
+        historyEntry.postLastMove = this.lastMove ? JSON.parse(JSON.stringify(this.lastMove)) : null;
+        historyEntry.endResult = endResult;
 
-        // push history
         this.moveHistory.push(historyEntry);
         this.redoStack = [];
         this.masterHistory.push({
             from: { r: fromR, c: fromC },
             to: { r: toR, c: toC },
             promotion: historyEntry.promotionPiece || null,
-            piece: piece
+            piece
         });
 
-        const result = this.checkGameOver();
-        if (result) this.isGameOver = true;
-
-        return result;
+        return endResult;
     }
 // --------------- undoMove / redoMove ---------------
     undoMove() {
-        if (!this.moveHistory || this.moveHistory.length === 0) return false;
+        if (!this.moveHistory.length) return false;
+
         const entry = this.moveHistory.pop();
-        // keep masterHistory in sync with undo
-        if (this.masterHistory && this.masterHistory.length) {
-            this.masterHistory.pop();
-        }
-
-
-        // העבר ל-redo stack
         this.redoStack.push(entry);
+        if (this.masterHistory.length) this.masterHistory.pop();
 
-        // restore moved piece back to from-square
-        const piece = entry.from.piece;
-        this.board[entry.from.r][entry.from.c] = piece;
+        this.board[entry.from.r][entry.from.c] = entry.from.piece;
 
-        // clear destination by restoring captured (or null)
-        // note: entry.to.captured is the captured piece before the move (or null)
-        if (entry.special && entry.special.isEnPassant && entry.to.capturedPos) {
-            // en-passant: the destination was empty; we need to restore captured pawn to its capturedPos
+        if (entry.special.isEnPassant) {
+            this.board[entry.to.r][entry.to.c] = null;
             const cap = entry.to.capturedPos;
             this.board[cap.r][cap.c] = entry.to.captured;
-            // ensure destination is empty
-            this.board[entry.to.r][entry.to.c] = null;
         } else {
             this.board[entry.to.r][entry.to.c] = entry.to.captured || null;
         }
 
-        // if castle - move rook back
-        if (entry.special && entry.special.isCastle === 'k') {
-            const r = entry.to.r;
-            const rookFrom = { r, c: entry.to.c - 1 };
-            const rookTo = { r, c: 7 };
-            this.board[rookTo.r][rookTo.c] = this.board[rookFrom.r][rookFrom.c];
-            this.board[rookFrom.r][rookFrom.c] = null;
-        }
-        if (entry.special && entry.special.isCastle === 'q') {
-            const r = entry.to.r;
-            const rookFrom = { r, c: entry.to.c + 1 };
-            const rookTo = { r, c: 0 };
-            this.board[rookTo.r][rookTo.c] = this.board[rookFrom.r][rookFrom.c];
-            this.board[rookFrom.r][rookFrom.c] = null;
+        if (entry.special.isCastle === 'k') {
+            this.board[entry.to.r][7] = this.board[entry.to.r][entry.to.c - 1];
+            this.board[entry.to.r][entry.to.c - 1] = null;
+        } else if (entry.special.isCastle === 'q') {
+            this.board[entry.to.r][0] = this.board[entry.to.r][entry.to.c + 1];
+            this.board[entry.to.r][entry.to.c + 1] = null;
         }
 
-        // if there was a promotion, the piece on from-square should be pawn again;
-        // entry.from.piece holds original piece, so we already restored it.
-
-        // restore meta state
+        this.turn = entry.prevTurn;
         this.enPassantTarget = entry.prevEnPassant ? { ...entry.prevEnPassant } : null;
         this.castlingRights = { ...entry.prevCastling };
         this.halfmoveClock = entry.prevHalfmoveClock;
         this.positionCount = new Map(entry.prevPositionCount);
         this.isGameOver = entry.prevIsGameOver;
-        this.lastMove = entry.prevLastMove ? { ...entry.prevLastMove } : null;
-        this.turn = entry.prevTurn;
-
+        this.gameResult = entry.prevGameResult || null;
+        this.lastMove = entry.prevLastMove ? JSON.parse(JSON.stringify(entry.prevLastMove)) : null;
         return true;
     }
 
     redoMove() {
-        if (!this.redoStack || this.redoStack.length === 0) return false;
-        const entry = this.redoStack.pop();
+        if (!this.redoStack.length) return false;
 
-        // remove piece from from-square
-        const fromR = entry.from.r, fromC = entry.from.c, toR = entry.to.r, toC = entry.to.c;
-        const piece = entry.from.piece;
+        const entry = this.redoStack.pop();
+        const { r: fromR, c: fromC } = entry.from;
+        const { r: toR, c: toC } = entry.to;
 
         this.board[fromR][fromC] = null;
 
-        // handle en-passant capture removal
-        if (entry.special && entry.special.isEnPassant && entry.to.capturedPos) {
+        if (entry.special.isEnPassant) {
             const cap = entry.to.capturedPos;
             this.board[cap.r][cap.c] = null;
         }
 
-        // place piece on destination (promotion handled by stored promotionPiece)
-        if (entry.promotionPiece) this.board[toR][toC] = entry.promotionPiece;
-        else this.board[toR][toC] = piece;
+        this.board[toR][toC] = entry.promotionPiece || entry.from.piece;
 
-        // handle castle rook move
-        if (entry.special && entry.special.isCastle === 'k') {
+        if (entry.special.isCastle === 'k') {
             this.board[toR][toC - 1] = this.board[toR][7];
             this.board[toR][7] = null;
-        }
-        if (entry.special && entry.special.isCastle === 'q') {
+        } else if (entry.special.isCastle === 'q') {
             this.board[toR][toC + 1] = this.board[toR][0];
             this.board[toR][0] = null;
         }
 
-        // restore post-state: positionCount, turn, castling if available.
-        if (entry.postPositionCount) this.positionCount = new Map(entry.postPositionCount);
-        this.turn = entry.postTurn || this.turn;
+        this.turn = entry.postTurn;
+        this.enPassantTarget = entry.postEnPassant ? { ...entry.postEnPassant } : null;
+        this.castlingRights = { ...entry.postCastling };
+        this.halfmoveClock = entry.postHalfmoveClock;
+        this.positionCount = new Map(entry.postPositionCount);
+        this.isGameOver = entry.postIsGameOver;
+        this.gameResult = entry.postGameResult || null;
+        this.lastMove = entry.postLastMove ? JSON.parse(JSON.stringify(entry.postLastMove)) : null;
 
-        // push back to history
         this.moveHistory.push(entry);
-        // restore masterHistory entry on redo
-        if (!this.masterHistory) this.masterHistory = [];
         this.masterHistory.push({
-            from: { r: entry.from.r, c: entry.from.c },
-            to: { r: entry.to.r, c: entry.to.c },
+            from: { r: fromR, c: fromC },
+            to: { r: toR, c: toC },
             promotion: entry.promotionPiece || null,
             piece: entry.from.piece
         });
-
-
         return true;
     }
 
@@ -535,7 +530,7 @@ class ChessEngine {
             return { type: 'stalemate', reason: '50-move rule' };
         }
 
-        // threefold repetition: בדוק את המפתח הנוכחי
+        // threefold repetition: \u05D1\u05D3\u05D5\u05E7 \u05D0\u05EA \u05D4\u05DE\u05E4\u05EA\u05D7 \u05D4\u05E0\u05D5\u05DB\u05D7\u05D9
         if (this.getPositionKey) {
             const key = this.getPositionKey();
             if ((this.positionCount.get(key) || 0) >= 3) {
@@ -573,20 +568,18 @@ class ChessEngine {
     // --- clone() for AI (deep copy of engine state) ---
     clone() {
         const copy = new ChessEngine();
-        // shallow constructor called; now copy fields
         copy.board = this.board.map(row => row.slice());
         copy.turn = this.turn;
         copy.isGameOver = this.isGameOver;
-        copy.enPassantTarget = this.enPassantTarget ? { r: this.enPassantTarget.r, c: this.enPassantTarget.c } : null;
+        copy.gameResult = this.gameResult;
+        copy.enPassantTarget = this.enPassantTarget ? { ...this.enPassantTarget } : null;
         copy.castlingRights = { ...this.castlingRights };
         copy.lastMove = this.lastMove ? JSON.parse(JSON.stringify(this.lastMove)) : null;
-        // clone history structures lightly (used for move-list etc.)
         copy.moveHistory = this.moveHistory ? JSON.parse(JSON.stringify(this.moveHistory)) : [];
         copy.redoStack = this.redoStack ? JSON.parse(JSON.stringify(this.redoStack)) : [];
         copy.halfmoveClock = this.halfmoveClock;
-        copy.positionCount = new Map(this.positionCount); // copy map
+        copy.positionCount = new Map(this.positionCount);
         copy.masterHistory = this.masterHistory ? JSON.parse(JSON.stringify(this.masterHistory)) : [];
-        // don't set UI specific things
         return copy;
     }
 
@@ -621,12 +614,18 @@ class GameClock {
     }
 
     switchTurn(newTurn) {
-        this._tick();
-        if (this.turn === 'white') {
-            this.whiteTime += this.increment;
-        } else {
-            this.blackTime += this.increment;
+        if (!this.running) {
+            this.turn = newTurn;
+            this.lastTimestamp = performance.now();
+            return;
         }
+
+        this._tick();
+        if (!this.running) return; // \u05D4\u05D6\u05DE\u05DF \u05E0\u05D2\u05DE\u05E8 \u05D1\u05DE\u05D4\u05DC\u05DA \u05D4-tick
+
+        if (this.turn === 'white') this.whiteTime += this.increment;
+        else this.blackTime += this.increment;
+
         this.turn = newTurn;
         this.lastTimestamp = performance.now();
     }
@@ -673,27 +672,14 @@ class ChessUI {
         this.allowUndoWhilePreview = false;
 
     }
-    // בתוך class ChessUI
-    updateControlStates() {
-        const undoBtn = document.getElementById('undoBtn');
-        const redoBtn = document.getElementById('redoBtn');
-        if (!undoBtn || !redoBtn) return;
 
-        if (this.previewEngine && !this.allowUndoWhilePreview) {
-            undoBtn.disabled = true;
-            redoBtn.disabled = true;
-        } else {
-            undoBtn.disabled = false;
-            redoBtn.disabled = false;
-        }
-    }
 
     goToMove(moveIndex) {
-        // צור engine חדש ונקי
+        // \u05E6\u05D5\u05E8 engine \u05D7\u05D3\u05E9 \u05D5\u05E0\u05E7\u05D9
         const preview = new ChessEngine();
         preview.reset();
 
-        // שחק עד המהלך המבוקש
+        // \u05E9\u05D7\u05E7 \u05E2\u05D3 \u05D4\u05DE\u05D4\u05DC\u05DA \u05D4\u05DE\u05D1\u05D5\u05E7\u05E9
         for (let i = 0; i <= moveIndex; i++) {
             const m = this.engine.moveHistory[i];
             if (!m) break;
@@ -714,11 +700,11 @@ class ChessUI {
     }
 
     handleMove(from, to, promotion = null) {
-        // קבל את המהלך החוקי (אם קיים) במקום בדיקה בוליאנית בלבד
+        // \u05E7\u05D1\u05DC \u05D0\u05EA \u05D4\u05DE\u05D4\u05DC\u05DA \u05D4\u05D7\u05D5\u05E7\u05D9 (\u05D0\u05DD \u05E7\u05D9\u05D9\u05DD) \u05D1\u05DE\u05E7\u05D5\u05DD \u05D1\u05D3\u05D9\u05E7\u05D4 \u05D1\u05D5\u05DC\u05D9\u05D0\u05E0\u05D9\u05EA \u05D1\u05DC\u05D1\u05D3
         const legalMoves = this.engine.getLegalMoves(from.r, from.c);
         const legalMove = legalMoves.find(m => m.r === to.r && m.c === to.c);
 
-        // אם המהלך לא חוקי — נקים מצב ונשרטט לוח ולא נעשה כלום אחר
+        // \u05D0\u05DD \u05D4\u05DE\u05D4\u05DC\u05DA \u05DC\u05D0 \u05D7\u05D5\u05E7\u05D9 \u2014 \u05E0\u05E7\u05D9\u05DD \u05DE\u05E6\u05D1 \u05D5\u05E0\u05E9\u05E8\u05D8\u05D8 \u05DC\u05D5\u05D7 \u05D5\u05DC\u05D0 \u05E0\u05E2\u05E9\u05D4 \u05DB\u05DC\u05D5\u05DD \u05D0\u05D7\u05E8
         if (!legalMove) {
             this.selectedSquare = null;
             this.possibleMoves = [];
@@ -726,38 +712,38 @@ class ChessUI {
             return;
         }
 
-        // אם זה מהלך קידום חוקי אבל אין עדיין בחירת קידום — בקש בחירה ואז חזור לפונקציה
+        // \u05D0\u05DD \u05D6\u05D4 \u05DE\u05D4\u05DC\u05DA \u05E7\u05D9\u05D3\u05D5\u05DD \u05D7\u05D5\u05E7\u05D9 \u05D0\u05D1\u05DC \u05D0\u05D9\u05DF \u05E2\u05D3\u05D9\u05D9\u05DF \u05D1\u05D7\u05D9\u05E8\u05EA \u05E7\u05D9\u05D3\u05D5\u05DD \u2014 \u05D1\u05E7\u05E9 \u05D1\u05D7\u05D9\u05E8\u05D4 \u05D5\u05D0\u05D6 \u05D7\u05D6\u05D5\u05E8 \u05DC\u05E4\u05D5\u05E0\u05E7\u05E6\u05D9\u05D4
         if (legalMove.promotion && !promotion) {
-            // askPromotion מחזירה Promise (הקיימת בקוד שלך), לכן נטפל ב־then
+            // askPromotion \u05DE\u05D7\u05D6\u05D9\u05E8\u05D4 Promise (\u05D4\u05E7\u05D9\u05D9\u05DE\u05EA \u05D1\u05E7\u05D5\u05D3 \u05E9\u05DC\u05DA), \u05DC\u05DB\u05DF \u05E0\u05D8\u05E4\u05DC \u05D1\u05BEthen
             this.askPromotion(this.engine.turn).then(chosen => {
-                // כאשר המשתמש בחר כלי — נבצע את המהלך עם הקידום
+                // \u05DB\u05D0\u05E9\u05E8 \u05D4\u05DE\u05E9\u05EA\u05DE\u05E9 \u05D1\u05D7\u05E8 \u05DB\u05DC\u05D9 \u2014 \u05E0\u05D1\u05E6\u05E2 \u05D0\u05EA \u05D4\u05DE\u05D4\u05DC\u05DA \u05E2\u05DD \u05D4\u05E7\u05D9\u05D3\u05D5\u05DD
                 this.handleMove(from, to, chosen);
             }).catch(() => {
-                // במקרה והמשתמש ביטל את תפריט הקידום — רק נסדר UI מחדש
+                // \u05D1\u05DE\u05E7\u05E8\u05D4 \u05D5\u05D4\u05DE\u05E9\u05EA\u05DE\u05E9 \u05D1\u05D9\u05D8\u05DC \u05D0\u05EA \u05EA\u05E4\u05E8\u05D9\u05D8 \u05D4\u05E7\u05D9\u05D3\u05D5\u05DD \u2014 \u05E8\u05E7 \u05E0\u05E1\u05D3\u05E8 UI \u05DE\u05D7\u05D3\u05E9
                 this.selectedSquare = null;
                 this.possibleMoves = [];
                 this.renderBoard();
             });
-            return; // חשוב — לא לבצע את המהלך עכשיו
+            return; // \u05D7\u05E9\u05D5\u05D1 \u2014 \u05DC\u05D0 \u05DC\u05D1\u05E6\u05E2 \u05D0\u05EA \u05D4\u05DE\u05D4\u05DC\u05DA \u05E2\u05DB\u05E9\u05D9\u05D5
         }
 
-        // עכשיו המהלך חוקי (ואם צריך קידום — הוא כבר נבחר ועמד בפרמטר promotion)
+        // \u05E2\u05DB\u05E9\u05D9\u05D5 \u05D4\u05DE\u05D4\u05DC\u05DA \u05D7\u05D5\u05E7\u05D9 (\u05D5\u05D0\u05DD \u05E6\u05E8\u05D9\u05DA \u05E7\u05D9\u05D3\u05D5\u05DD \u2014 \u05D4\u05D5\u05D0 \u05DB\u05D1\u05E8 \u05E0\u05D1\u05D7\u05E8 \u05D5\u05E2\u05DE\u05D3 \u05D1\u05E4\u05E8\u05DE\u05D8\u05E8 promotion)
         const result = this.engine.makeMove(from.r, from.c, to.r, to.c, promotion);
 
-        // עדכון השעון (אם קיים)
+        // \u05E2\u05D3\u05DB\u05D5\u05DF \u05D4\u05E9\u05E2\u05D5\u05DF (\u05D0\u05DD \u05E7\u05D9\u05D9\u05DD)
         if (typeof clockInstance !== 'undefined' && clockInstance) {
             clockInstance.switchTurn(this.engine.turn);
         }
 
-        // ננקה בחירה ונרנדר לוח
+        // \u05E0\u05E0\u05E7\u05D4 \u05D1\u05D7\u05D9\u05E8\u05D4 \u05D5\u05E0\u05E8\u05E0\u05D3\u05E8 \u05DC\u05D5\u05D7
         this.selectedSquare = null;
         this.possibleMoves = [];
         this.renderBoard();
 
-        // עדכון רשימת המהלכים — רק אחרי שהמהלך בוצע והיסטוריית המהלכים עודכנה
+        // \u05E2\u05D3\u05DB\u05D5\u05DF \u05E8\u05E9\u05D9\u05DE\u05EA \u05D4\u05DE\u05D4\u05DC\u05DB\u05D9\u05DD \u2014 \u05E8\u05E7 \u05D0\u05D7\u05E8\u05D9 \u05E9\u05D4\u05DE\u05D4\u05DC\u05DA \u05D1\u05D5\u05E6\u05E2 \u05D5\u05D4\u05D9\u05E1\u05D8\u05D5\u05E8\u05D9\u05D9\u05EA \u05D4\u05DE\u05D4\u05DC\u05DB\u05D9\u05DD \u05E2\u05D5\u05D3\u05DB\u05E0\u05D4
         if (typeof renderMoveList === 'function') renderMoveList();
 
-        // בדיקת סיום משחק
+        // \u05D1\u05D3\u05D9\u05E7\u05EA \u05E1\u05D9\u05D5\u05DD \u05DE\u05E9\u05D7\u05E7
         if (result) {
             if (typeof clockInstance !== 'undefined' && clockInstance && typeof clockInstance.stop === 'function') {
                 clockInstance.stop();
@@ -766,7 +752,7 @@ class ChessUI {
         }
     }
 
-    /* -- המרות UI <-> Engine -- */
+    /* -- \u05D4\u05DE\u05E8\u05D5\u05EA UI <-> Engine -- */
     uiToEngineCoords(uiR, uiC) {
         if (!this.isFlipped) return { r: uiR, c: uiC };
         return { r: 7 - uiR, c: 7 - uiC };
@@ -776,7 +762,7 @@ class ChessUI {
         return { r: 7 - r, c: 7 - c };
     }
 
-    /* -- renderBoard משתמש ב-UI קואורדינטות (uiR,uiC) ואז ממפה ל-engine -- */
+    /* -- renderBoard \u05DE\u05E9\u05EA\u05DE\u05E9 \u05D1-UI \u05E7\u05D5\u05D0\u05D5\u05E8\u05D3\u05D9\u05E0\u05D8\u05D5\u05EA (uiR,uiC) \u05D5\u05D0\u05D6 \u05DE\u05DE\u05E4\u05D4 \u05DC-engine -- */
     renderBoard() {
         // use previewEngine for display if exists, otherwise real engine
         const engineToUse = this.previewEngine || this.engine;
@@ -790,7 +776,7 @@ class ChessUI {
         if (evalEl) evalEl.innerText = engineToUse.evaluate();
 
         const statusEl = document.getElementById('status');
-        if (statusEl) statusEl.innerText = `תור: ${engineToUse.turn === 'white' ? "לבן" : "שחור"}`;
+        if (statusEl) statusEl.innerText = `\u05EA\u05D5\u05E8: ${engineToUse.turn === 'white' ? "\u05DC\u05D1\u05DF" : "\u05E9\u05D7\u05D5\u05E8"}`;
 
         for (let uiR = 0; uiR < 8; uiR++) {
             for (let uiC = 0; uiC < 8; uiC++) {
@@ -798,14 +784,14 @@ class ChessUI {
 
                 const sq = document.createElement('div');
                 sq.addEventListener('dragover', (e) => {
-                    e.preventDefault(); // חובה
+                    e.preventDefault(); // \u05D7\u05D5\u05D1\u05D4
                 });
 
                 // drop handler MUST use the real engine (we'll keep the same behavior as before).
                 // If preview is active, ignore drops (don't allow changing live game via preview).
                 sq.addEventListener('drop', async (e) => {
                     e.preventDefault();
-                    if (!canPlayerMove()) return; // ❌ חסום אם זה תור AI
+                    if (!canPlayerMove()) return; // \u274C \u05D7\u05E1\u05D5\u05DD \u05D0\u05DD \u05D6\u05D4 \u05EA\u05D5\u05E8 AI
                     if (this.previewEngine) return;
 
                     let from = this.draggedFrom;
@@ -849,7 +835,7 @@ class ChessUI {
                 const isLight = ((r + c) % 2 === 1); // choose parity you prefer (1 => a1 dark)
                 sq.className = `square ${isLight ? 'light' : 'dark'}`;
 
-                // סימון מהלך אחרון (מ־engineToUse — כלומר גם preview יציג מהלך אחרון נכון)
+                // \u05E1\u05D9\u05DE\u05D5\u05DF \u05DE\u05D4\u05DC\u05DA \u05D0\u05D7\u05E8\u05D5\u05DF (\u05DE\u05BEengineToUse \u2014 \u05DB\u05DC\u05D5\u05DE\u05E8 \u05D2\u05DD preview \u05D9\u05E6\u05D9\u05D2 \u05DE\u05D4\u05DC\u05DA \u05D0\u05D7\u05E8\u05D5\u05DF \u05E0\u05DB\u05D5\u05DF)
                 if (engineToUse.lastMove &&
                     ((engineToUse.lastMove.from.r === r && engineToUse.lastMove.from.c === c) ||
                         (engineToUse.lastMove.to.r === r && engineToUse.lastMove.to.c === c))) {
@@ -862,7 +848,7 @@ class ChessUI {
                 // selectedSquare compare against engineToUse (so selection highlights preview appropriately)
                 if (this.selectedSquare && this.selectedSquare.r === r && this.selectedSquare.c === c) sq.classList.add('selected');
 
-                // סימון מהלכים אפשריים - only when not in preview (possibleMoves belong to live engine)
+                // \u05E1\u05D9\u05DE\u05D5\u05DF \u05DE\u05D4\u05DC\u05DB\u05D9\u05DD \u05D0\u05E4\u05E9\u05E8\u05D9\u05D9\u05DD - only when not in preview (possibleMoves belong to live engine)
                 const moveHint = (!this.previewEngine) ? this.possibleMoves.find(m => m.r === r && m.c === c) : null;
                 if (moveHint) {
                     if (this.engine.getPiece(r, c)) sq.classList.add('hint-capture');
@@ -873,12 +859,13 @@ class ChessUI {
                 const p = engineToUse.getPiece(r, c);
                 if (p) {
                     const img = document.createElement('img');
+                    img.className = 'piece-img';
                     // draggable only when not in preview AND the piece belongs to the player to move on the live engine
                     img.draggable = !this.previewEngine;
 
                     if (!this.previewEngine) {
                         img.addEventListener('dragstart', (e) => {
-                            if (!canPlayerMove()) { // ❌ חסום אם זה תור AI
+                            if (!canPlayerMove()) { // \u274C \u05D7\u05E1\u05D5\u05DD \u05D0\u05DD \u05D6\u05D4 \u05EA\u05D5\u05E8 AI
                                 e.preventDefault();
                                 return;
                             }
@@ -916,7 +903,7 @@ class ChessUI {
                     }
 
                     img.src = PIECE_IMAGES[p];
-                    img.className = 'piece-img';
+                    img.alt = p;
                     sq.appendChild(img);
                 }
 
@@ -931,18 +918,18 @@ class ChessUI {
         }
         this.updateControlStates();
     }
-    // בתוך מחלקת ChessUI
+    // \u05D1\u05EA\u05D5\u05DA \u05DE\u05D7\u05DC\u05E7\u05EA ChessUI
     updateControlStates() {
         const undoBtn = document.getElementById('undoBtn');
         const redoBtn = document.getElementById('redoBtn');
-        const liveBtn = document.getElementById('moves-live-btn'); // הכפתור Live אם קיים
+        const liveBtn = document.getElementById('moves-live-btn'); // \u05D4\u05DB\u05E4\u05EA\u05D5\u05E8 Live \u05D0\u05DD \u05E7\u05D9\u05D9\u05DD
 
-        // מצב האם אנחנו בפריוויו
+        // \u05DE\u05E6\u05D1 \u05D4\u05D0\u05DD \u05D0\u05E0\u05D7\u05E0\u05D5 \u05D1\u05E4\u05E8\u05D9\u05D5\u05D5\u05D9\u05D5
         const inPreview = !!this.previewEngine;
-        // האם המשתמש אפשר ביטול בזמן פריוויו (דגל שנמצא בקונסטרקטור)
+        // \u05D4\u05D0\u05DD \u05D4\u05DE\u05E9\u05EA\u05DE\u05E9 \u05D0\u05E4\u05E9\u05E8 \u05D1\u05D9\u05D8\u05D5\u05DC \u05D1\u05D6\u05DE\u05DF \u05E4\u05E8\u05D9\u05D5\u05D5\u05D9\u05D5 (\u05D3\u05D2\u05DC \u05E9\u05E0\u05DE\u05E6\u05D0 \u05D1\u05E7\u05D5\u05E0\u05E1\u05D8\u05E8\u05E7\u05D8\u05D5\u05E8)
         const allowWhilePreview = !!this.allowUndoWhilePreview;
 
-        // אם אנחנו בפריוויו ולדגל אין היתר - השבת כפתורים
+        // \u05D0\u05DD \u05D0\u05E0\u05D7\u05E0\u05D5 \u05D1\u05E4\u05E8\u05D9\u05D5\u05D5\u05D9\u05D5 \u05D5\u05DC\u05D3\u05D2\u05DC \u05D0\u05D9\u05DF \u05D4\u05D9\u05EA\u05E8 - \u05D4\u05E9\u05D1\u05EA \u05DB\u05E4\u05EA\u05D5\u05E8\u05D9\u05DD
         if (undoBtn) {
             undoBtn.disabled = inPreview && !allowWhilePreview;
             if (undoBtn.disabled) undoBtn.classList.add('btn-disabled'); else undoBtn.classList.remove('btn-disabled');
@@ -952,19 +939,19 @@ class ChessUI {
             if (redoBtn.disabled) redoBtn.classList.add('btn-disabled'); else redoBtn.classList.remove('btn-disabled');
         }
 
-        // Live button: מוצג רק בזמן פריוויו (אופציונלי)
+        // Live button: \u05DE\u05D5\u05E6\u05D2 \u05E8\u05E7 \u05D1\u05D6\u05DE\u05DF \u05E4\u05E8\u05D9\u05D5\u05D5\u05D9\u05D5 (\u05D0\u05D5\u05E4\u05E6\u05D9\u05D5\u05E0\u05DC\u05D9)
         if (liveBtn) {
             liveBtn.style.display = inPreview ? 'inline-block' : 'none';
         }
     }
 
-    /* handleSquareClick מקבל UI קואורדינטות, ממפה ל-engine ומשתמש ב-engine בלבד מעכשיו */
+    /* handleSquareClick \u05DE\u05E7\u05D1\u05DC UI \u05E7\u05D5\u05D0\u05D5\u05E8\u05D3\u05D9\u05E0\u05D8\u05D5\u05EA, \u05DE\u05DE\u05E4\u05D4 \u05DC-engine \u05D5\u05DE\u05E9\u05EA\u05DE\u05E9 \u05D1-engine \u05D1\u05DC\u05D1\u05D3 \u05DE\u05E2\u05DB\u05E9\u05D9\u05D5 */
     async handleSquareClick(uiR, uiC) {
         if (this.engine.isGameOver) return;
 
         const { r, c } = this.uiToEngineCoords(uiR, uiC);
 
-        // ניסיון להזיז אם יש בחירה
+        // \u05E0\u05D9\u05E1\u05D9\u05D5\u05DF \u05DC\u05D4\u05D6\u05D9\u05D6 \u05D0\u05DD \u05D9\u05E9 \u05D1\u05D7\u05D9\u05E8\u05D4
         if (this.selectedSquare) {
             const move = this.possibleMoves.find(m => m.r === r && m.c === c);
             if (move) {
@@ -978,7 +965,7 @@ class ChessUI {
             }
         }
 
-        // בחירת כלי
+        // \u05D1\u05D7\u05D9\u05E8\u05EA \u05DB\u05DC\u05D9
         if (this.engine.isOwnPiece(r, c)) {
             this.selectedSquare = { r, c };
             this.possibleMoves = this.engine.getLegalMoves(r, c);
@@ -1014,18 +1001,33 @@ class ChessUI {
         });
     }
 
-    showGameOver(type) {
+    showGameOver(result) {
         const modal = document.getElementById('game-over-modal');
         if (!modal) return;
+
+        const title = document.getElementById('winner-title');
+        const reason = document.getElementById('end-reason');
         modal.style.display = 'flex';
-        if (type === 'checkmate') {
-            const winner = this.engine.turn === 'white' ? 'השחור' : 'הלבן';
-            document.getElementById('winner-title').innerText = `מט! ${winner} ניצח!`;
-            document.getElementById('end-reason').innerText = `בדיקה מסיימת: ${winner} ניצח על ידי מט.`;
-        } else {
-            document.getElementById('winner-title').innerText = `תיקו`;
-            document.getElementById('end-reason').innerText = `התוצאה: תיקו (חוסר מהלכים חוקיים).`;
+
+        if (result === 'checkmate') {
+            const winner = this.engine.turn === 'white' ? '\u05D4\u05E9\u05D7\u05D5\u05E8' : '\u05D4\u05DC\u05D1\u05DF';
+            title.innerText = `\u05DE\u05D8! ${winner} \u05E0\u05D9\u05E6\u05D7!`;
+            reason.innerText = `${winner} \u05E0\u05D9\u05E6\u05D7 \u05D1\u05D0\u05DE\u05E6\u05E2\u05D5\u05EA \u05DE\u05D8.`;
+            if (typeof window.autoSaveFinishedGame === 'function') window.autoSaveFinishedGame();
+            return;
         }
+
+        const drawReason = typeof result === 'object' ? result.reason : null;
+        const reasonMap = {
+            '50-move rule': '\u05D7\u05D5\u05E7 \u05D7\u05DE\u05D9\u05E9\u05D9\u05DD \u05D4\u05DE\u05E1\u05E2\u05D9\u05DD',
+            'threefold repetition': '\u05D7\u05D6\u05E8\u05D4 \u05DE\u05E9\u05D5\u05DC\u05E9\u05EA \u05E2\u05DC \u05D0\u05D5\u05EA\u05D4 \u05E2\u05DE\u05D3\u05D4',
+            'insufficient material': '\u05D7\u05D5\u05E1\u05E8 \u05D7\u05D5\u05DE\u05E8 \u05DE\u05E1\u05E4\u05D9\u05E7 \u05DC\u05DE\u05D8'
+        };
+        title.innerText = '\u05EA\u05D9\u05E7\u05D5';
+        reason.innerText = drawReason
+            ? `\u05D4\u05DE\u05E9\u05D7\u05E7 \u05D4\u05E1\u05EA\u05D9\u05D9\u05DD \u05D1\u05EA\u05D9\u05E7\u05D5: ${reasonMap[drawReason] || drawReason}.`
+            : '\u05D4\u05DE\u05E9\u05D7\u05E7 \u05D4\u05E1\u05EA\u05D9\u05D9\u05DD \u05D1\u05EA\u05D9\u05E7\u05D5 \u05DE\u05E9\u05D5\u05DD \u05E9\u05D0\u05D9\u05DF \u05DE\u05E1\u05E2\u05D9\u05DD \u05D7\u05D5\u05E7\u05D9\u05D9\u05DD.';
+        if (typeof window.autoSaveFinishedGame === 'function') window.autoSaveFinishedGame();
     }
     // inside class ChessUI
 
@@ -1059,97 +1061,121 @@ const ui = new ChessUI(engine);
 
 // ===== AI =====
 let aiEnabled = false;
-let aiColor = 'black';
+const aiColor = 'black';
+const aiPlayer = new SimpleAI(engine, ui);
+window.aiPlayer = aiPlayer;
 
-window.aiPlayer = new SimpleAI(engine, ui);
-window.aiPlayer.setDepth(6);
+const initialDepthInput = document.getElementById('aiDepthInput');
+aiPlayer.setDepth(initialDepthInput ? (parseInt(initialDepthInput.value, 10) || 3) : 3);
 
 function canPlayerMove() {
-    if (!aiEnabled) return true;
-    if (engine.turn === aiColor) return false;
+    if (engine.isGameOver) return false;
+    if (aiEnabled && engine.turn === aiColor) return false;
     return true;
 }
+window.canPlayerMove = canPlayerMove;
 
-console.log('AI created:', window.aiPlayer);
+function isMultiplayerActive() {
+    return !!(window.mp && window.mp.active);
+}
 
+function maybeAiMove() {
+    if (!aiEnabled || isMultiplayerActive() || engine.isGameOver) return;
+    if (engine.turn === aiColor && !aiPlayer.isRunning) {
+        aiPlayer.startAs(aiColor);
+    }
+}
 
-
+// \u05D4-hook \u05D7\u05DC \u05E8\u05E7 \u05E2\u05DC \u05DE\u05E0\u05D5\u05E2 \u05D4\u05DE\u05E9\u05D7\u05E7 \u05D4\u05D7\u05D9. \u05E2\u05D5\u05EA\u05E7\u05D9\u05DD \u05E9\u05D4-AI \u05D1\u05D5\u05D3\u05E7 \u05E0\u05E9\u05D0\u05E8\u05D9\u05DD \u05E0\u05E7\u05D9\u05D9\u05DD \u05DE\u05EA\u05D5\u05E4\u05E2\u05D5\u05EA \u05DC\u05D5\u05D5\u05D0\u05D9.
 const originalMakeMove = engine.makeMove.bind(engine);
 engine.makeMove = function (fromR, fromC, toR, toC, promotionPiece = null) {
     const result = originalMakeMove(fromR, fromC, toR, toC, promotionPiece);
-
-    if (aiEnabled && engine.turn === aiColor) {
-        // במקום _thinkAndPlay:
-        aiPlayer.startAs(aiColor);
-    }
-
+    if (result !== false && !result) maybeAiMove();
     return result;
 };
 
-
-
-// --- expose simple global game API used by inline HTML onclicks (and safe alternative listeners) ---
 window.game = {
     undo: () => {
-        // אם אנחנו בצפייה בפריוויו ובדגל לא מאפשר שינוי — חסום את הפעולה
-        if (ui && ui.previewEngine && !ui.allowUndoWhilePreview) {
-            alert('לא ניתן לבצע ביטול בזמן צפייה בעבר. לחץ Live כדי לחזור למצב החי או אפשר Undo בזמן פריוויו בהגדרות.');
+        if (isMultiplayerActive()) {
+            alert('\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D1\u05D8\u05DC \u05DE\u05E1\u05E2\u05D9\u05DD \u05D1\u05DE\u05E9\u05D7\u05E7 \u05D0\u05D5\u05E0\u05DC\u05D9\u05D9\u05DF.');
+            return;
+        }
+        if (ui.previewEngine && !ui.allowUndoWhilePreview) {
+            alert('\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D1\u05D8\u05DC \u05D1\u05D6\u05DE\u05DF \u05E6\u05E4\u05D9\u05D9\u05D4 \u05D1\u05E2\u05D1\u05E8. \u05DC\u05D7\u05E5 Live \u05DB\u05D3\u05D9 \u05DC\u05D7\u05D6\u05D5\u05E8 \u05DC\u05DE\u05E9\u05D7\u05E7.');
             return;
         }
 
-        // in case preview was allowed, we continue and apply undo to live engine
-        const ok = engine.undoMove();
-        if (ok) {
-            ui.selectedSquare = null;
-            ui.possibleMoves = [];
-            // אם היינו בפריוויו ורוצים להתעדכן — נבטל את הפריוויו (אופציונלי)
-            if (ui && ui.previewEngine) {
-                // אם אפשרנו undoWhilePreview — נשמור preview אך עדיף לצאת כדי לא לבלבל
-                ui.exitPreview();
-            }
-            ui.renderBoard();
-            if (typeof renderMoveList === 'function') renderMoveList(); maybeAiMove();
-        } else {
-            alert('אין מהלכים לבטל');
+        aiPlayer.stop();
+        let changed = engine.undoMove();
+        // \u05D1\u05DE\u05E6\u05D1 AI \u05DE\u05D7\u05D6\u05D9\u05E8\u05D9\u05DD \u05D2\u05DD \u05D0\u05EA \u05DE\u05E1\u05E2 \u05D4\u05D0\u05D3\u05DD \u05D4\u05D0\u05D7\u05E8\u05D5\u05DF \u05DB\u05D3\u05D9 \u05DC\u05D7\u05D6\u05D5\u05E8 \u05DC\u05EA\u05D5\u05E8 \u05D4\u05D0\u05D3\u05DD.
+        while (changed && aiEnabled && engine.turn === aiColor && engine.moveHistory.length) {
+            engine.undoMove();
         }
+
+        if (!changed) {
+            alert('\u05D0\u05D9\u05DF \u05DE\u05E1\u05E2\u05D9\u05DD \u05DC\u05D1\u05D8\u05DC');
+            return;
+        }
+        ui.exitPreview();
+        ui.selectedSquare = null;
+        ui.possibleMoves = [];
+        ui.renderBoard();
+        renderMoveList();
     },
 
     redo: () => {
-        if (ui && ui.previewEngine && !ui.allowUndoWhilePreview) {
-            alert('לא ניתן לבצע החזרה בזמן צפייה בעבר. לחץ Live כדי לחזור למצב החי או אפשר Redo בזמן פריוויו בהגדרות.');
+        if (isMultiplayerActive()) {
+            alert('\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D4\u05D7\u05D6\u05D9\u05E8 \u05DE\u05E1\u05E2\u05D9\u05DD \u05D1\u05DE\u05E9\u05D7\u05E7 \u05D0\u05D5\u05E0\u05DC\u05D9\u05D9\u05DF.');
+            return;
+        }
+        if (ui.previewEngine && !ui.allowUndoWhilePreview) {
+            alert('\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D4\u05D7\u05D6\u05D9\u05E8 \u05DE\u05E1\u05E2 \u05D1\u05D6\u05DE\u05DF \u05E6\u05E4\u05D9\u05D9\u05D4 \u05D1\u05E2\u05D1\u05E8. \u05DC\u05D7\u05E5 Live \u05DB\u05D3\u05D9 \u05DC\u05D7\u05D6\u05D5\u05E8 \u05DC\u05DE\u05E9\u05D7\u05E7.');
             return;
         }
 
-        const ok = engine.redoMove();
-        if (ok) {
-            ui.selectedSquare = null;
-            ui.possibleMoves = [];
-            if (ui && ui.previewEngine) {
-                ui.exitPreview();
-            }
-            ui.renderBoard();
-            if (typeof renderMoveList === 'function') renderMoveList(); maybeAiMove();
-        } else {
-            alert('אין מהלכים לבצע שוב');
+        let changed = engine.redoMove();
+        // \u05D0\u05DD \u05D4\u05DE\u05E1\u05E2 \u05E9\u05D4\u05D5\u05D7\u05D6\u05E8 \u05DE\u05E2\u05D1\u05D9\u05E8 \u05D0\u05EA \u05D4\u05EA\u05D5\u05E8 \u05DC-AI \u05D5\u05D9\u05E9 \u05DE\u05E1\u05E2 AI \u05E9\u05DE\u05D5\u05E8, \u05DE\u05D7\u05D6\u05D9\u05E8\u05D9\u05DD \u05D2\u05DD \u05D0\u05D5\u05EA\u05D5.
+        if (changed && aiEnabled && engine.turn === aiColor && engine.redoStack.length) {
+            engine.redoMove();
+        }
+
+        if (!changed) {
+            alert('\u05D0\u05D9\u05DF \u05DE\u05E1\u05E2\u05D9\u05DD \u05DC\u05D4\u05D7\u05D6\u05D9\u05E8');
+            return;
+        }
+        ui.exitPreview();
+        ui.selectedSquare = null;
+        ui.possibleMoves = [];
+        ui.renderBoard();
+        renderMoveList();
+        if (engine.isGameOver && engine.moveHistory.length) {
+            ui.showGameOver(engine.moveHistory[engine.moveHistory.length - 1].endResult);
         }
     },
 
     reset: () => {
-        if (!confirm("להתחיל מחדש?")) return;
-
-        // אם בצפיית פריוויו — צא קודם
-        if (ui && ui.previewEngine) {
-            ui.exitPreview();
+        if (isMultiplayerActive()) {
+            alert('\u05D1\u05DE\u05E9\u05D7\u05E7 \u05D0\u05D5\u05E0\u05DC\u05D9\u05D9\u05DF \u05D9\u05E9 \u05DC\u05D4\u05EA\u05E0\u05EA\u05E7 \u05DC\u05E4\u05E0\u05D9 \u05D4\u05EA\u05D7\u05DC\u05EA \u05DE\u05E9\u05D7\u05E7 \u05D7\u05D3\u05E9.');
+            return;
         }
+        if (!confirm('\u05DC\u05D4\u05EA\u05D7\u05D9\u05DC \u05DE\u05D7\u05D3\u05E9?')) return;
 
+        aiPlayer.stop();
         engine.reset();
+        if (typeof window.startNewSavedGame === 'function') window.startNewSavedGame();
+        ui.exitPreview();
         ui.selectedSquare = null;
         ui.possibleMoves = [];
         ui.renderBoard();
-        if (typeof renderMoveList === 'function') renderMoveList();
+        renderMoveList();
 
+        if (clockInstance) {
+            clockInstance.stop();
+            removeClock();
+        }
         const modal = document.getElementById('game-over-modal');
         if (modal) modal.style.display = 'none';
+        maybeAiMove();
     },
 
     flipBoard: () => {
@@ -1160,40 +1186,34 @@ window.game = {
     },
 
     toggleAI: () => {
-        // הפוך מצב הדגל
-        aiEnabled = !aiEnabled;
+        if (isMultiplayerActive()) {
+            alert('\u05DC\u05D0 \u05E0\u05D9\u05EA\u05DF \u05DC\u05D4\u05E4\u05E2\u05D9\u05DC AI \u05D1\u05D6\u05DE\u05DF \u05DE\u05E9\u05D7\u05E7 \u05D0\u05D5\u05E0\u05DC\u05D9\u05D9\u05DF.');
+            return;
+        }
 
-        // קבל את האלמנטים (ייתכן שהם לא קיימים — לכן בדיקה אחרי הקריאה)
+        aiEnabled = !aiEnabled;
         const statusSpan = document.getElementById('ai-status');
         const aiControls = document.getElementById('ai-controls');
         const depthInput = document.getElementById('aiDepthInput');
 
-        if (aiEnabled) {
-            // עדכן סטטוס אם האלמנט קיים
-            if (statusSpan) statusSpan.innerText = 'פועל';
-            // הצג את בקרת העומק אם קיימת
-            if (aiControls) aiControls.style.display = 'block';
+        if (statusSpan) statusSpan.textContent = aiEnabled ? '\u05E4\u05E2\u05D9\u05DC' : '\u05DB\u05D1\u05D5\u05D9';
+        if (aiControls) aiControls.style.display = aiEnabled ? 'block' : 'none';
 
-            // העמס עומק התחלתי ל-AI אם הוא קיים והשדה קיים
-            if (window.aiPlayer && depthInput) {
-                aiPlayer.setDepth(parseInt(depthInput.value, 10) || 3);
-            }
+        if (aiEnabled) {
+            aiPlayer.setDepth(depthInput ? (parseInt(depthInput.value, 10) || 3) : 3);
+            maybeAiMove();
         } else {
-            if (statusSpan) statusSpan.innerText = 'כבוי';
-            if (aiControls) aiControls.style.display = 'none';
+            aiPlayer.stop();
         }
     },
 
     goLive: () => {
-        if (ui) {
-            ui.exitPreview();
-            ui.selectedSquare = null;
-            ui.possibleMoves = [];
-            ui.renderBoard();
-        }
+        ui.exitPreview();
+        ui.selectedSquare = null;
+        ui.possibleMoves = [];
+        ui.renderBoard();
     }
 };
-
 
 // =================== Clock on-demand / UI controls ===================
 
@@ -1205,6 +1225,7 @@ let clocksRenderIntervalId = null;
 // build clock markup
 function renderClocksUI() {
     const container = document.getElementById('clocks');
+    if (!container) return;
     container.innerHTML = '';
     if (!clockInstance) {
         container.classList.add('no-clock');
@@ -1215,7 +1236,7 @@ function renderClocksUI() {
     // White clock row
     const wRow = document.createElement('div');
     wRow.className = 'clock-row' + ((clockInstance.running && clockInstance.turn === 'white') ? ' active' : '');
-    const wLabel = document.createElement('div'); wLabel.className = 'clock-label'; wLabel.innerText = 'לבן';
+    const wLabel = document.createElement('div'); wLabel.className = 'clock-label'; wLabel.innerText = '\u05DC\u05D1\u05DF';
     const wTime = document.createElement('div'); wTime.className = 'clock-time'; wTime.id = 'whiteClock';
     wRow.appendChild(wLabel); wRow.appendChild(wTime);
     container.appendChild(wRow);
@@ -1223,7 +1244,7 @@ function renderClocksUI() {
     // Black clock row
     const bRow = document.createElement('div');
     bRow.className = 'clock-row' + ((clockInstance.running && clockInstance.turn === 'black') ? ' active' : '');
-    const bLabel = document.createElement('div'); bLabel.className = 'clock-label'; bLabel.innerText = 'שחור';
+    const bLabel = document.createElement('div'); bLabel.className = 'clock-label'; bLabel.innerText = '\u05E9\u05D7\u05D5\u05E8';
     const bTime = document.createElement('div'); bTime.className = 'clock-time'; bTime.id = 'blackClock';
     bRow.appendChild(bLabel); bRow.appendChild(bTime);
     container.appendChild(bRow);
@@ -1314,29 +1335,31 @@ document.getElementById('startClockBtn').addEventListener('click', (e) => {
 
     // instantiate but don't start immediately
     clockInstance = new GameClockCustom(whiteMin, blackMin, incSec);
-    // אחרי: clockInstance = new GameClockCustom(whiteMin, blackMin, incSec);
+    // \u05D0\u05D7\u05E8\u05D9: clockInstance = new GameClockCustom(whiteMin, blackMin, incSec);
     clockInstance.onFlag = (flaggedColor) => {
-        // flaggedColor = 'white' אם לילדף הלבן נגמר הזמן
-        // המנצח הוא הצד השני
+        // flaggedColor = 'white' \u05D0\u05DD \u05DC\u05D9\u05DC\u05D3\u05E3 \u05D4\u05DC\u05D1\u05DF \u05E0\u05D2\u05DE\u05E8 \u05D4\u05D6\u05DE\u05DF
+        // \u05D4\u05DE\u05E0\u05E6\u05D7 \u05D4\u05D5\u05D0 \u05D4\u05E6\u05D3 \u05D4\u05E9\u05E0\u05D9
         try {
-            // עצור את השעון
+            // \u05E2\u05E6\u05D5\u05E8 \u05D0\u05EA \u05D4\u05E9\u05E2\u05D5\u05DF
             if (typeof clockInstance.stop === 'function') clockInstance.stop();
-            // סמן משחק כגמור
+            // \u05E1\u05DE\u05DF \u05DE\u05E9\u05D7\u05E7 \u05DB\u05D2\u05DE\u05D5\u05E8
             engine.isGameOver = true;
+            engine.gameResult = flaggedColor === 'white' ? 'black' : 'white';
 
-            const winner = (flaggedColor === 'white') ? 'השחור' : 'הלבן';
-            // עדכן מודל התוצאה ומציג modal
+            const winner = (flaggedColor === 'white') ? '\u05D4\u05E9\u05D7\u05D5\u05E8' : '\u05D4\u05DC\u05D1\u05DF';
+            // \u05E2\u05D3\u05DB\u05DF \u05DE\u05D5\u05D3\u05DC \u05D4\u05EA\u05D5\u05E6\u05D0\u05D4 \u05D5\u05DE\u05E6\u05D9\u05D2 modal
             const modal = document.getElementById('game-over-modal');
             if (modal) {
-                document.getElementById('winner-title').innerText = `${winner} ניצח בזמן!`;
-                document.getElementById('end-reason').innerText = `הזמן של ${flaggedColor === 'white' ? 'הלבן' : 'השחור'} נגמר.`;
+                document.getElementById('winner-title').innerText = `${winner} \u05E0\u05D9\u05E6\u05D7 \u05D1\u05D6\u05DE\u05DF!`;
+                document.getElementById('end-reason').innerText = `\u05D4\u05D6\u05DE\u05DF \u05E9\u05DC ${flaggedColor === 'white' ? '\u05D4\u05DC\u05D1\u05DF' : '\u05D4\u05E9\u05D7\u05D5\u05E8'} \u05E0\u05D2\u05DE\u05E8.`;
                 modal.style.display = 'flex';
             } else {
-                alert(`${winner} ניצח בזמן!`);
+                alert(`${winner} \u05E0\u05D9\u05E6\u05D7 \u05D1\u05D6\u05DE\u05DF!`);
             }
-            // עדכן סטטוס UI (שורת סטטוס)
+            // \u05E2\u05D3\u05DB\u05DF \u05E1\u05D8\u05D8\u05D5\u05E1 UI (\u05E9\u05D5\u05E8\u05EA \u05E1\u05D8\u05D8\u05D5\u05E1)
             const statusEl = document.getElementById('status');
-            if (statusEl) statusEl.innerText = `זמן נגמר — ${winner} ניצח`;
+            if (statusEl) statusEl.innerText = `\u05D6\u05DE\u05DF \u05E0\u05D2\u05DE\u05E8 \u2014 ${winner} \u05E0\u05D9\u05E6\u05D7`;
+            if (typeof window.autoSaveFinishedGame === 'function') window.autoSaveFinishedGame();
         } catch (err) {
             console.error('onFlag handler error', err);
         }
@@ -1345,7 +1368,7 @@ document.getElementById('startClockBtn').addEventListener('click', (e) => {
 
     // update toggle button text / hide form
     document.getElementById('clock-form').style.display = 'none';
-    document.getElementById('toggleClockBtn').innerText = 'הסר שעון';
+    document.getElementById('toggleClockBtn').innerText = '\u05D4\u05E1\u05E8 \u05E9\u05E2\u05D5\u05DF';
 
     // schedule start after ~2s
     clockStartTimerId = setTimeout(() => {
@@ -1365,32 +1388,20 @@ function removeClock() {
     if (clocksRenderIntervalId) { clearInterval(clocksRenderIntervalId); clocksRenderIntervalId = null; }
     clockInstance = null;
     renderClocksUI();
-    document.getElementById('toggleClockBtn').innerText = 'הוסף שעון';
+    document.getElementById('toggleClockBtn').innerText = '\u05D4\u05D5\u05E1\u05E3 \u05E9\u05E2\u05D5\u05DF';
     document.getElementById('clock-form').style.display = 'none';
 }
 
-// make sure the game integrates with clock switching:
-// add this line in ChessUI.handleMove just after engine.makeMove(...) (you already added switchTurn earlier)
-// keep: clock.switchTurn(this.engine.turn);
-// If clockInstance may be null, guard it:
-(function patchClockIntegration() {
-    // we assume you already inserted 'clock.switchTurn(this.engine.turn)' earlier.
-    // if you didn't, replace it with:
-    // if (clockInstance) clockInstance.switchTurn(this.engine.turn);
-    // To be safe, modify your handleMove line accordingly:
-    // find: clock.switchTurn(this.engine.turn);
-    // replace with: if (typeof clockInstance !== 'undefined' && clockInstance) clockInstance.switchTurn(this.engine.turn);
-})();
 /* ---------- Move list rendering helpers ---------- */
 
-// המרת קואורדינטות engine (r,c) לשם משבצת בשיטה האלגברית: a1..h8
+// \u05D4\u05DE\u05E8\u05EA \u05E7\u05D5\u05D0\u05D5\u05E8\u05D3\u05D9\u05E0\u05D8\u05D5\u05EA engine (r,c) \u05DC\u05E9\u05DD \u05DE\u05E9\u05D1\u05E6\u05EA \u05D1\u05E9\u05D9\u05D8\u05D4 \u05D4\u05D0\u05DC\u05D2\u05D1\u05E8\u05D9\u05EA: a1..h8
 function squareName(r, c) {
     const file = String.fromCharCode(97 + c); // 0->'a'
     const rank = 8 - r; // r=0 -> '8'
     return `${file}${rank}`;
 }
 
-// מקבל entry מה־moveHistory (המבנה שאתה שומר ב-history) ומחזיר מחרוזת קריאה
+// \u05DE\u05E7\u05D1\u05DC entry \u05DE\u05D4\u05BEmoveHistory (\u05D4\u05DE\u05D1\u05E0\u05D4 \u05E9\u05D0\u05EA\u05D4 \u05E9\u05D5\u05DE\u05E8 \u05D1-history) \u05D5\u05DE\u05D7\u05D6\u05D9\u05E8 \u05DE\u05D7\u05E8\u05D5\u05D6\u05EA \u05E7\u05E8\u05D9\u05D0\u05D4
 function formatHistoryEntry(entry) {
     if (!entry) return '';
 
@@ -1476,7 +1487,7 @@ function renderMoveList() {
         container.appendChild(row);
     }
 
-    // אם יש מספר אי-זוגי של מהלכים (מהלך לבן אחרון) - אפשר לגלול למטה אוטומטית
+    // \u05D0\u05DD \u05D9\u05E9 \u05DE\u05E1\u05E4\u05E8 \u05D0\u05D9-\u05D6\u05D5\u05D2\u05D9 \u05E9\u05DC \u05DE\u05D4\u05DC\u05DB\u05D9\u05DD (\u05DE\u05D4\u05DC\u05DA \u05DC\u05D1\u05DF \u05D0\u05D7\u05E8\u05D5\u05DF) - \u05D0\u05E4\u05E9\u05E8 \u05DC\u05D2\u05DC\u05D5\u05DC \u05DC\u05DE\u05D8\u05D4 \u05D0\u05D5\u05D8\u05D5\u05DE\u05D8\u05D9\u05EA
     container.scrollTop = container.scrollHeight;
 }
 
@@ -1484,111 +1495,84 @@ function renderMoveList() {
 ensureClocksRendering();
 
 
-// attach safe listeners for buttons (optional but recommended)
-document.addEventListener('DOMContentLoaded', () => {
+// \u05D7\u05D9\u05D1\u05D5\u05E8 \u05D1\u05D8\u05D5\u05D7 \u05E9\u05DC \u05DB\u05E4\u05EA\u05D5\u05E8\u05D9 \u05D4\u05DE\u05DE\u05E9\u05E7
+window.addEventListener('DOMContentLoaded', () => {
     const modalResetBtn = document.getElementById('modalResetBtn');
-    if (modalResetBtn) modalResetBtn.addEventListener('click', () => { if (window.game && window.game.reset) window.game.reset(); });
+    if (modalResetBtn) modalResetBtn.addEventListener('click', window.game.reset);
 
-    // גם לחצנים הראשיים (אם תרצה להוסיף כפילות)
     const resetBtn = document.getElementById('resetBtn');
-    if (resetBtn) resetBtn.addEventListener('click', () => { if (window.game && window.game.reset) window.game.reset(); });
+    if (resetBtn) resetBtn.addEventListener('click', window.game.reset);
 
     const flipBtn = document.getElementById('flipBtn');
-    if (flipBtn) flipBtn.addEventListener('click', () => { if (window.game && window.game.flipBoard) window.game.flipBoard(); });
+    if (flipBtn) flipBtn.addEventListener('click', window.game.flipBoard);
 
-    const toggleAiBtn = document.getElementById('toggleAiBtn');
-    const aiControls = document.getElementById('ai-controls');
-
-    toggleAiBtn.addEventListener('click', () => {
-        aiEnabled = !aiEnabled;
-        document.getElementById('ai-status').textContent = aiEnabled ? 'פעיל' : 'כבוי';
-
-        if (aiControls) aiControls.style.display = aiEnabled ? 'block' : 'none'; // <--- חשוב
-
-        if (!window.aiPlayer) return;
-
-        if (aiEnabled && engine.turn === aiColor && !aiPlayer.isRunning) {
-            aiPlayer.startAs(aiColor);
-        } else if (!aiEnabled) {
-            aiPlayer.stop();
-        }
-    });
-
-
-
-
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn) undoBtn.addEventListener('click', window.game.undo);
 
     const redoBtn = document.getElementById('redoBtn');
-    if (redoBtn) {
-        redoBtn.addEventListener('click', () => {
-            if (window.game && window.game.redo) window.game.redo();
-        });
-    }
-    const chk = document.getElementById('allowPreviewUndoCheckbox');
-    if (chk) {
-        // initial state from ui if exists
-        chk.checked = (ui && ui.allowUndoWhilePreview) ? true : false;
-        chk.addEventListener('change', () => {
-            if (ui) ui.allowUndoWhilePreview = chk.checked;
-        });
-    }
-    // אופציונלי: קיצורי מקלדת (Ctrl+Z / Ctrl+Y או Ctrl+Shift+Z)
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-            e.preventDefault(); if (window.game && window.game.undo) window.game.undo();
-        }
-        if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-            ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
-            e.preventDefault(); if (window.game && window.game.redo) window.game.redo();
-        }
-    });
-    // ===== AI depth control =====
-    // ===== AI depth control =====
-    const depthInput = document.getElementById('aiDepthInput');
+    if (redoBtn) redoBtn.addEventListener('click', window.game.redo);
 
+    const toggleAiBtn = document.getElementById('toggleAiBtn');
+    if (toggleAiBtn) toggleAiBtn.addEventListener('click', window.game.toggleAI);
+
+    const depthInput = document.getElementById('aiDepthInput');
     if (depthInput) {
         depthInput.addEventListener('change', () => {
-            if (!aiEnabled || !window.aiPlayer) return;
-
-            const depth = parseInt(depthInput.value, 10) || 3;
-            if (typeof window.aiPlayer.setDepth === 'function') {
-                window.aiPlayer.setDepth(depth);
-                console.log('AI depth set to', depth);
-            }
+            const depth = Math.max(1, Math.min(6, parseInt(depthInput.value, 10) || 3));
+            depthInput.value = String(depth);
+            aiPlayer.setDepth(depth);
         });
     }
 
+    const chk = document.getElementById('allowPreviewUndoCheckbox');
+    if (chk) {
+        chk.checked = !!ui.allowUndoWhilePreview;
+        chk.addEventListener('change', () => {
+            ui.allowUndoWhilePreview = chk.checked;
+            ui.updateControlStates();
+        });
+    }
 
+    document.addEventListener('keydown', (e) => {
+        const target = e.target;
+        if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
 
-
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            window.game.undo();
+        } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+                   ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
+            e.preventDefault();
+            window.game.redo();
+        }
+    });
 });
 
-
-// יצירת כפתור Live מעל המהלכים בצד שמאל
+// \u05D9\u05E6\u05D9\u05E8\u05EA \u05DB\u05E4\u05EA\u05D5\u05E8 Live \u05DE\u05E2\u05DC \u05D4\u05DE\u05D4\u05DC\u05DB\u05D9\u05DD \u05D1\u05E6\u05D3 \u05E9\u05DE\u05D0\u05DC
 (function () {
     const movesHeader = document.querySelector('.moves-panel-header h3');
     if (!movesHeader) return;
 
-    // בדיקה אם הכפתור כבר קיים
+    // \u05D1\u05D3\u05D9\u05E7\u05D4 \u05D0\u05DD \u05D4\u05DB\u05E4\u05EA\u05D5\u05E8 \u05DB\u05D1\u05E8 \u05E7\u05D9\u05D9\u05DD
     let liveBtn = document.getElementById('moves-live-btn');
     if (!liveBtn) {
         liveBtn = document.createElement('button');
         liveBtn.id = 'moves-live-btn';
         liveBtn.textContent = 'Live';
-        liveBtn.className = 'btn'; // תתאם את הסגנון שלך
-        liveBtn.style.display = 'none'; // נסתר כברירת מחדל
-        liveBtn.style.marginLeft = '10px'; // רווח מהכותרת
+        liveBtn.className = 'btn'; // \u05EA\u05EA\u05D0\u05DD \u05D0\u05EA \u05D4\u05E1\u05D2\u05E0\u05D5\u05DF \u05E9\u05DC\u05DA
+        liveBtn.style.display = 'none'; // \u05E0\u05E1\u05EA\u05E8 \u05DB\u05D1\u05E8\u05D9\u05E8\u05EA \u05DE\u05D7\u05D3\u05DC
+        liveBtn.style.marginLeft = '10px'; // \u05E8\u05D5\u05D5\u05D7 \u05DE\u05D4\u05DB\u05D5\u05EA\u05E8\u05EA
         liveBtn.style.verticalAlign = 'middle';
 
-        // מכניסים את הכפתור אחרי הכותרת בתוך ה־header
+        // \u05DE\u05DB\u05E0\u05D9\u05E1\u05D9\u05DD \u05D0\u05EA \u05D4\u05DB\u05E4\u05EA\u05D5\u05E8 \u05D0\u05D7\u05E8\u05D9 \u05D4\u05DB\u05D5\u05EA\u05E8\u05EA \u05D1\u05EA\u05D5\u05DA \u05D4\u05BEheader
         movesHeader.parentNode.insertBefore(liveBtn, movesHeader.nextSibling);
 
-        // לחיצה על הכפתור יוצאת ממצב Preview
+        // \u05DC\u05D7\u05D9\u05E6\u05D4 \u05E2\u05DC \u05D4\u05DB\u05E4\u05EA\u05D5\u05E8 \u05D9\u05D5\u05E6\u05D0\u05EA \u05DE\u05DE\u05E6\u05D1 Preview
         liveBtn.addEventListener('click', () => {
             if (ui && ui.exitPreview) ui.exitPreview();
         });
     }
 
-    // עדכון התצוגה בהתאם לפריוויו
+    // \u05E2\u05D3\u05DB\u05D5\u05DF \u05D4\u05EA\u05E6\u05D5\u05D2\u05D4 \u05D1\u05D4\u05EA\u05D0\u05DD \u05DC\u05E4\u05E8\u05D9\u05D5\u05D5\u05D9\u05D5
     if (ui && ui.updateControlStates) ui.updateControlStates();
 })();
