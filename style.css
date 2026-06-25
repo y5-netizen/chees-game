@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --sq-light: #ebecd0;
     --sq-dark: #779556;
     --highlight: rgba(255, 255, 51, 0.6);
@@ -12,18 +12,18 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     display: flex;
-    justify-content: flex-start; /* לא מרכז יותר */
-    align-items: flex-start; /* מתחיל מהחלק העליון */
+    justify-content: flex-start; /* \u05DC\u05D0 \u05DE\u05E8\u05DB\u05D6 \u05D9\u05D5\u05EA\u05E8 */
+    align-items: flex-start; /* \u05DE\u05EA\u05D7\u05D9\u05DC \u05DE\u05D4\u05D7\u05DC\u05E7 \u05D4\u05E2\u05DC\u05D9\u05D5\u05DF */
     min-height: 100vh;
 }
 
-/* דוחף את ה-main-container לקצה הימני */
+/* \u05D3\u05D5\u05D7\u05E3 \u05D0\u05EA \u05D4-main-container \u05DC\u05E7\u05E6\u05D4 \u05D4\u05D9\u05DE\u05E0\u05D9 */
 .main-container {
     display: flex;
     gap: 18px;
     align-items: flex-start;
     padding: 18px;
-    margin-left: auto; /* זה דוחף את הכל שמאלה כדי שה-main-container יעמוד לימין */
+    margin-left: auto; /* \u05D6\u05D4 \u05D3\u05D5\u05D7\u05E3 \u05D0\u05EA \u05D4\u05DB\u05DC \u05E9\u05DE\u05D0\u05DC\u05D4 \u05DB\u05D3\u05D9 \u05E9\u05D4-main-container \u05D9\u05E2\u05DE\u05D5\u05D3 \u05DC\u05D9\u05DE\u05D9\u05DF */
     max-width: calc(100% - 20px);
 }
 
@@ -53,7 +53,7 @@ body {
         background-color: var(--highlight) !important;
     }
 
-/* סימון מהלך חוקי: נקודה קטנה במרכז */
+/* \u05E1\u05D9\u05DE\u05D5\u05DF \u05DE\u05D4\u05DC\u05DA \u05D7\u05D5\u05E7\u05D9: \u05E0\u05E7\u05D5\u05D3\u05D4 \u05E7\u05D8\u05E0\u05D4 \u05D1\u05DE\u05E8\u05DB\u05D6 */
 .hint-move::after {
     content: "";
     position: absolute;
@@ -65,7 +65,7 @@ body {
 }
 
 
-/* סימון אכילה חוקית: טבעת/בולטות סביב הכלי */
+/* \u05E1\u05D9\u05DE\u05D5\u05DF \u05D0\u05DB\u05D9\u05DC\u05D4 \u05D7\u05D5\u05E7\u05D9\u05EA: \u05D8\u05D1\u05E2\u05EA/\u05D1\u05D5\u05DC\u05D8\u05D5\u05EA \u05E1\u05D1\u05D9\u05D1 \u05D4\u05DB\u05DC\u05D9 */
 .hint-capture::after {
     content: "";
     position: absolute;
@@ -199,8 +199,8 @@ button {
     width: 90%;
     height: 90%;
     object-fit: contain;
-    pointer-events: auto; /* או פשוט הסר את השורה לחלוטין */
-    -webkit-user-drag: element; /* אופציונלי — עוזר בדפדפנים מסוימים */
+    pointer-events: auto; /* \u05D0\u05D5 \u05E4\u05E9\u05D5\u05D8 \u05D4\u05E1\u05E8 \u05D0\u05EA \u05D4\u05E9\u05D5\u05E8\u05D4 \u05DC\u05D7\u05DC\u05D5\u05D8\u05D9\u05DF */
+    -webkit-user-drag: element; /* \u05D0\u05D5\u05E4\u05E6\u05D9\u05D5\u05E0\u05DC\u05D9 \u2014 \u05E2\u05D5\u05D6\u05E8 \u05D1\u05D3\u05E4\u05D3\u05E4\u05E0\u05D9\u05DD \u05DE\u05E1\u05D5\u05D9\u05DE\u05D9\u05DD */
 }
 
 #clocks {
@@ -261,7 +261,7 @@ button {
     box-shadow: 0 6px 14px rgba(0,0,0,0.45);
 }
 
-/* label "לבן" / "שחור" */
+/* label "\u05DC\u05D1\u05DF" / "\u05E9\u05D7\u05D5\u05E8" */
 .clock-label {
     font-size: 12px;
     color: #ddd;
@@ -333,14 +333,14 @@ button {
 
 /* BOARD responsive */
 .board-wrapper {
-    width: 570px; /* ← זה הגודל שיש לך עכשיו (תוכל לשנות מספר) */
+    width: 570px; /* \u2190 \u05D6\u05D4 \u05D4\u05D2\u05D5\u05D3\u05DC \u05E9\u05D9\u05E9 \u05DC\u05DA \u05E2\u05DB\u05E9\u05D9\u05D5 (\u05EA\u05D5\u05DB\u05DC \u05DC\u05E9\u05E0\u05D5\u05EA \u05DE\u05E1\u05E4\u05E8) */
     max-width: calc(100vw - 360px);
     aspect-ratio: 1 / 1;
     box-sizing: border-box;
 }
 
 
-/* השמירה על מרובע מלא בתוך ה-wrapper */
+/* \u05D4\u05E9\u05DE\u05D9\u05E8\u05D4 \u05E2\u05DC \u05DE\u05E8\u05D5\u05D1\u05E2 \u05DE\u05DC\u05D0 \u05D1\u05EA\u05D5\u05DA \u05D4-wrapper */
 .board {
     width: 100%;
     height: 100%;
@@ -355,11 +355,11 @@ button {
     width: 320px;
     max-width: 38vw;
     background: #272522;
-    padding: 12px; /* פחות padding */
+    padding: 12px; /* \u05E4\u05D7\u05D5\u05EA padding */
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    gap: 0px; /* קטן */
+    gap: 0px; /* \u05E7\u05D8\u05DF */
     box-sizing: border-box;
     font-size: 15px;
 }
@@ -371,23 +371,23 @@ button {
     align-items: center;
 }
 
-    /* הכפתורים בסיידבר קטנים יותר כדי לא לשבור את ה-layout */
+    /* \u05D4\u05DB\u05E4\u05EA\u05D5\u05E8\u05D9\u05DD \u05D1\u05E1\u05D9\u05D9\u05D3\u05D1\u05E8 \u05E7\u05D8\u05E0\u05D9\u05DD \u05D9\u05D5\u05EA\u05E8 \u05DB\u05D3\u05D9 \u05DC\u05D0 \u05DC\u05E9\u05D1\u05D5\u05E8 \u05D0\u05EA \u05D4-layout */
     .game-buttons button {
-        padding: 8px 10px; /* קטן יותר מהברירת מחדל */
-        margin-top: 0; /* מבטל margin-top כללית */
+        padding: 8px 10px; /* \u05E7\u05D8\u05DF \u05D9\u05D5\u05EA\u05E8 \u05DE\u05D4\u05D1\u05E8\u05D9\u05E8\u05EA \u05DE\u05D7\u05D3\u05DC */
+        margin-top: 0; /* \u05DE\u05D1\u05D8\u05DC margin-top \u05DB\u05DC\u05DC\u05D9\u05EA */
         font-size: 0.95rem;
         min-width: 64px;
     }
 
-/* צבע מיוחד ל-undo/redo (לא חובה) — לשים לב שזה לא חורג מהערכת צבעים */
+/* \u05E6\u05D1\u05E2 \u05DE\u05D9\u05D5\u05D7\u05D3 \u05DC-undo/redo (\u05DC\u05D0 \u05D7\u05D5\u05D1\u05D4) \u2014 \u05DC\u05E9\u05D9\u05DD \u05DC\u05D1 \u05E9\u05D6\u05D4 \u05DC\u05D0 \u05D7\u05D5\u05E8\u05D2 \u05DE\u05D4\u05E2\u05E8\u05DB\u05EA \u05E6\u05D1\u05E2\u05D9\u05DD */
 #undoBtn {
     background: #f0ad4e;
 }
-/* כתום-זהוב */
+/* \u05DB\u05EA\u05D5\u05DD-\u05D6\u05D4\u05D5\u05D1 */
 #redoBtn {
     background: #5bc0de;
 }
-/* תכלת */
+/* \u05EA\u05DB\u05DC\u05EA */
 #undoBtn:hover {
     background: #f7b96f;
 }
@@ -397,11 +397,11 @@ button {
 }
 
 
-    /* Buttons smaller so they לא מקפיצים את ה-layout */
+    /* Buttons smaller so they \u05DC\u05D0 \u05DE\u05E7\u05E4\u05D9\u05E6\u05D9\u05DD \u05D0\u05EA \u05D4-layout */
     .sidebar button {
         background: #81b64c;
         border: none;
-        padding: 10px 5px; /* מוקטן */
+        padding: 10px 5px; /* \u05DE\u05D5\u05E7\u05D8\u05DF */
         margin-top: 6px;
         color: white;
         font-weight: bold;
@@ -465,7 +465,7 @@ button {
 /* Move list (sidebar) */
 .moves-wrapper {
     margin-top: 12px;
-    max-height: 260px; /* גובה רשימה - ניתן לשנות */
+    max-height: 260px; /* \u05D2\u05D5\u05D1\u05D4 \u05E8\u05E9\u05D9\u05DE\u05D4 - \u05E0\u05D9\u05EA\u05DF \u05DC\u05E9\u05E0\u05D5\u05EA */
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -483,7 +483,7 @@ button {
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.01);
 }
 
-/* כל שורה: מספר מהלך ואז מהלכים של לבן/שחור */
+/* \u05DB\u05DC \u05E9\u05D5\u05E8\u05D4: \u05DE\u05E1\u05E4\u05E8 \u05DE\u05D4\u05DC\u05DA \u05D5\u05D0\u05D6 \u05DE\u05D4\u05DC\u05DB\u05D9\u05DD \u05E9\u05DC \u05DC\u05D1\u05DF/\u05E9\u05D7\u05D5\u05E8 */
 .move-row {
     display: flex;
     gap: 8px;
@@ -506,7 +506,7 @@ button {
         text-overflow: ellipsis;
     }
 
-    /* highlight קל לשורה נבחרת (לשימוש מאוחר יותר) */
+    /* highlight \u05E7\u05DC \u05DC\u05E9\u05D5\u05E8\u05D4 \u05E0\u05D1\u05D7\u05E8\u05EA (\u05DC\u05E9\u05D9\u05DE\u05D5\u05E9 \u05DE\u05D0\u05D5\u05D7\u05E8 \u05D9\u05D5\u05EA\u05E8) */
     .move-row.selected {
         background: rgba(255,255,255,0.03);
     }
@@ -525,8 +525,79 @@ button.btn-disabled {
 }
 
 
-/*זה מוסיף סימון צהוב מסביב לגרירה
+/*\u05D6\u05D4 \u05DE\u05D5\u05E1\u05D9\u05E3 \u05E1\u05D9\u05DE\u05D5\u05DF \u05E6\u05D4\u05D5\u05D1 \u05DE\u05E1\u05D1\u05D9\u05D1 \u05DC\u05D2\u05E8\u05D9\u05E8\u05D4
     .square.selected-drag {
     box-shadow: 0 0 0 3px rgba(255, 255, 0, 0.6) inset;
 }*/
 
+
+
+/* \u05EA\u05D9\u05E7\u05D5\u05E0\u05D9 \u05E4\u05E8\u05D9\u05E1\u05D4 \u05D5\u05E0\u05D2\u05D9\u05E9\u05D5\u05EA */
+html { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: inherit; }
+body { overflow-x: hidden; }
+button:disabled, .btn-disabled { opacity: .45; cursor: not-allowed; }
+.not-draggable { cursor: default; }
+
+@media (min-width: 1151px) {
+    .main-container { width: 100%; padding-left: 300px; }
+}
+
+@media (max-width: 1150px) {
+    body { display: block; }
+    .main-container {
+        width: 100%; max-width: none; margin: 0;
+        justify-content: center; flex-wrap: wrap;
+        padding: 14px;
+    }
+    .moves-panel {
+        position: static; width: calc(100% - 28px); height: 280px;
+        margin: 0 14px 14px;
+    }
+    .board-wrapper { width: min(620px, calc(100vw - 380px)); max-width: none; }
+}
+
+@media (max-width: 700px) {
+    body { padding-top: 96px !important; }
+    #topbar { height: auto !important; min-height: 84px; flex-wrap: wrap; gap: 6px; padding: 8px !important; }
+    #topbar .tb-left, #topbar .tb-right { flex-wrap: wrap; gap: 6px !important; }
+    #topbar button { padding: 6px 8px !important; }
+    .main-container { flex-direction: column-reverse; align-items: center; padding: 10px; gap: 10px; }
+    .board-wrapper { width: calc(100vw - 20px); max-width: 620px; }
+    .sidebar { width: calc(100vw - 20px); max-width: 620px; }
+    .moves-panel { width: calc(100% - 20px); margin: 0 10px 10px; }
+    .modal-content, #auth-box, #history-box, #admin-box { width: calc(100vw - 28px) !important; max-width: 520px; padding: 22px !important; }
+    .piece-img { width: 96%; height: 96%; }
+}
+
+
+/* Final responsive fixes */
+html, body { max-width: 100%; overflow-x: hidden; }
+.move-list { max-height: none; }
+@media (max-width: 980px) {
+    body { display: block; padding-top: 52px; }
+    .main-container {
+        width: 100%; max-width: 100%; margin: 0; padding: 10px;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+        box-sizing: border-box;
+    }
+    .sidebar { width: min(100%, 620px); max-width: none; order: 2; }
+    .board-wrapper { width: min(96vw, 620px); max-width: none; order: 1; }
+    .moves-panel {
+        position: static; width: min(calc(100% - 20px), 620px); height: 280px;
+        margin: 10px auto; box-sizing: border-box;
+    }
+    #topbar { height: auto; min-height: 44px; padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
+    #topbar .tb-left, #topbar .tb-right { flex-wrap: wrap; gap: 6px; }
+    #topbar button { padding: 6px 8px; }
+}
+@media (max-width: 520px) {
+    .main-container { padding: 6px; }
+    .board-wrapper { width: calc(100vw - 12px); }
+    .sidebar { width: calc(100vw - 12px); padding: 9px; }
+    .game-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .game-buttons button { width: 100%; min-width: 0; }
+    #auth-box { width: calc(100vw - 28px) !important; padding: 24px 18px !important; box-sizing: border-box; }
+    #history-box, #admin-box { width: calc(100vw - 24px) !important; padding: 18px 14px !important; box-sizing: border-box; }
+    .game-row, .user-row { gap: 8px; flex-wrap: wrap; }
+}
